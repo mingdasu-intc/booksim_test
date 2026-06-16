@@ -1,0 +1,39 @@
+// Coherence-style request/reply traffic on the 6x7 (42-node) mesh.
+// BookSim has no coherence protocol FSM; this models the *traffic*:
+// control-sized requests, cache-line-sized data replies, read/write mix,
+// and separate request/reply subnets to avoid protocol deadlock.
+
+topology     = anynet;
+network_file = mesh6x7_anynet;
+routing_function = min;
+
+// --- Coherence transactions: request/reply ---
+use_read_write = 1;
+write_fraction = 0.3;        // read-heavy
+
+// 16B/flit: control packet = 1 flit, 64B cache line = 4 data + 1 head = 5 flit
+read_request_size  = 1;      // read request = address (control)
+read_reply_size    = 5;      // read reply = one cache line (data)
+write_request_size = 5;      // write request carries data
+write_reply_size   = 1;      // write reply = ack
+
+// --- Two subnets isolate requests from replies (deadlock avoidance) ---
+subnets = 2;
+read_request_subnet  = 0;
+write_request_subnet = 0;
+read_reply_subnet    = 1;
+write_reply_subnet   = 1;
+
+num_vcs     = 4;
+vc_buf_size = 8;
+vc_allocator = islip;
+sw_allocator = islip;
+alloc_iters  = 1;
+
+sim_type       = latency;
+traffic        = uniform;    // distributed directory; use hotspot for centralized
+packet_size    = 1;          // overridden by *_size fields in read_write mode
+sample_period  = 1000;
+warmup_periods = 3;
+sim_count      = 1;
+injection_rate = 0.05;

@@ -1,0 +1,50 @@
+// Coherence-style traffic on the 6x7 mesh -- HOTSPOT (centralized directories).
+// All requests target a small set of hotspot nodes, modeling a few shared
+// directory / memory-controller banks. Nodes 8,12,29,33 are spread across the
+// mesh (rows 1 & 4, cols 1 & 5). Replies still return to the requester.
+
+topology     = anynet;
+network_file = mesh6x7_anynet;
+routing_function = min;
+
+// --- Coherence transactions: request/reply ---
+use_read_write = 1;
+write_fraction = 0.3;        // read-heavy
+
+// 16B/flit: control packet = 1 flit, 64B cache line = 4 data + 1 head = 5 flit
+read_request_size  = 1;
+read_reply_size    = 5;
+write_request_size = 5;
+write_reply_size   = 1;
+
+// --- Two subnets isolate requests from replies (deadlock avoidance) ---
+subnets = 2;
+read_request_subnet  = 0;
+write_request_subnet = 0;
+read_reply_subnet    = 1;
+write_reply_subnet   = 1;
+
+// Per-message-type VC ranges (defaults assume 16 VCs); subnets handle the
+// request/reply separation, so every type may use the full 4-VC range.
+read_request_begin_vc  = 0;
+read_request_end_vc    = 3;
+write_request_begin_vc = 0;
+write_request_end_vc   = 3;
+read_reply_begin_vc    = 0;
+read_reply_end_vc      = 3;
+write_reply_begin_vc   = 0;
+write_reply_end_vc     = 3;
+
+num_vcs     = 4;
+vc_buf_size = 8;
+vc_allocator = islip;
+sw_allocator = islip;
+alloc_iters  = 1;
+
+sim_type       = latency;
+traffic        = hotspot({{8,12,29,33}});
+packet_size    = 1;
+sample_period  = 1000;
+warmup_periods = 3;
+sim_count      = 1;
+injection_rate = 0.05;

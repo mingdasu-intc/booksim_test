@@ -1,0 +1,45 @@
+// 6x7 (42-node) mesh built with the anynet topology.
+// Standard "mesh" (k-ary n-cube) is symmetric (k^n nodes), so an
+// asymmetric 6x7 grid is described explicitly via a network file.
+
+topology     = anynet;
+network_file = mesh6x7_anynet;
+
+// Routing: anynet builds a minimal-path routing table per router.
+routing_function = min;
+
+//
+// Flow control
+//
+num_vcs     = 8;
+vc_buf_size = 8;
+
+wait_for_tail_credit = 1;
+
+vc_allocator = islip;
+sw_allocator = islip;
+alloc_iters  = 1;
+
+credit_delay   = 2;
+routing_delay  = 0;
+vc_alloc_delay = 1;
+sw_alloc_delay = 1;
+st_final_delay = 1;
+
+input_speedup    = 1;
+output_speedup   = 1;
+internal_speedup = 1.0;
+
+//
+// Traffic
+//
+sim_type       = latency;
+traffic        = uniform;
+packet_size    = 1;
+use_read_write = 0;
+
+warmup_periods = 3;
+sample_period  = 1000;
+sim_count      = 1;
+
+injection_rate = 0.1;
