@@ -210,6 +210,11 @@ BookSimConfig::BookSimConfig( )
   _int_map["write_request_subnet"] = 0;
   _int_map["write_reply_subnet"] = 0;
 
+  // Optional: assign subnet per traffic class (e.g. {0,1,2,3}). When non-empty
+  // this overrides the per-message-type subnet mapping above, letting each
+  // class map directly to its own subnet independent of read/write semantics.
+  AddStrField("class_subnet", "");
+
   // Set packet length in flits
   _int_map["read_request_size"]  = 1;
   AddStrField("read_request_size", ""); // workaraound to allow for vector specification

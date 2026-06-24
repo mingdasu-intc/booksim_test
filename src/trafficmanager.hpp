@@ -126,6 +126,9 @@ protected:
 
   vector<int> _subnet;
 
+  // optional per-class subnet mapping (overrides _subnet when non-empty)
+  vector<int> _class_subnet;
+
   // ============ deadlock ==========
 
   int _deadlock_timer;

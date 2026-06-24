@@ -71,6 +71,9 @@ TrafficManager::TrafficManager( const Configuration &config, const vector<Networ
     _subnet[Flit::WRITE_REQUEST] = config.GetInt("write_request_subnet");
     _subnet[Flit::WRITE_REPLY] = config.GetInt("write_reply_subnet");
 
+    // optional: subnet chosen per traffic class instead of per message type
+    _class_subnet = config.GetIntArray("class_subnet");
+
     // ============ Message priorities ============ 
 
     string priority = config.GetStr( "priority" );
@@ -840,9 +843,14 @@ void TrafficManager::_GeneratePacket( int source, int stype,
         record = _measure_stats[cl];
     }
 
-    int subnetwork = ((packet_type == Flit::ANY_TYPE) ? 
+    int subnetwork;
+    if ( !_class_subnet.empty() ) {
+        subnetwork = _class_subnet[cl];
+    } else {
+        subnetwork = ((packet_type == Flit::ANY_TYPE) ?
                       RandomInt(_subnets-1) :
                       _subnet[packet_type]);
+    }
   
     if ( watch ) { 
         *gWatchOut << GetSimTime() << " | "

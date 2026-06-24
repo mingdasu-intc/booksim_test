@@ -1,0 +1,19 @@
+// Minimal test of the class_subnet patch: 4 classes -> 4 subnets, 1-flit, uniform.
+topology     = anynet;
+network_file = mesh6x7_chi_v2_anynet;
+routing_function = min;
+
+classes        = 4;
+use_read_write = {0,0,0,0};
+subnets        = 4;
+class_subnet   = {0,1,2,3};
+packet_size    = {1,1,1,1};
+traffic        = {uniform,uniform,uniform,uniform};
+injection_rate = {0.005,0.005,0.005,0.005};
+
+num_vcs     = 2;
+vc_buf_size = 8;
+sim_type       = latency;
+sample_period  = 1000;
+warmup_periods = 3;
+sim_count      = 1;

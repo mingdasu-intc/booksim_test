@@ -1,4 +1,10 @@
-# 6x7 Mesh + CHI 四独立物理通道 仿真说明
+# 6x7 Mesh + CHI 四独立物理通道 仿真说明（V1）
+
+> 这是 **V1**：用 BookSim 原生的 4 种消息类型映射 4 条通道，无需改源码，
+> 适合"读一致性 + snoop"的快速近似，但**无法建模写一致性数据流**。
+> 若需要写事务建模，见 V2：[`mesh6x7_chi_v2_classsubnet.md`](mesh6x7_chi_v2_classsubnet.md)
+> （通过 `class_subnet` 补丁让 subnet 按 class 选）。
+
 
 本文档总结在 BookSim2 上构建的 **6x7 mesh + CHI 风格一致性流量**模型，
 其中 CHI 的四条通道（REQ / DAT / SNP / RSP）被映射为 **4 个互相独立的物理网络**，
