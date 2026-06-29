@@ -129,6 +129,9 @@ protected:
   // optional per-class subnet mapping (overrides _subnet when non-empty)
   vector<int> _class_subnet;
 
+  // optional per-class source-node allowlist
+  vector<vector<int> > _class_source;
+
   // ============ deadlock ==========
 
   int _deadlock_timer;

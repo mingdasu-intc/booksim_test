@@ -215,6 +215,12 @@ BookSimConfig::BookSimConfig( )
   // class map directly to its own subnet independent of read/write semantics.
   AddStrField("class_subnet", "");
 
+  // Optional: restrict packet injection sources per traffic class, e.g.
+  // class_source = {{0,1},{168,169}}. When non-empty, class c only injects
+  // from the listed source nodes; destination selection is still controlled
+  // by the traffic pattern.
+  AddStrField("class_source", "");
+
   // Set packet length in flits
   _int_map["read_request_size"]  = 1;
   AddStrField("read_request_size", ""); // workaraound to allow for vector specification

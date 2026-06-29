@@ -74,6 +74,13 @@ TrafficManager::TrafficManager( const Configuration &config, const vector<Networ
     // optional: subnet chosen per traffic class instead of per message type
     _class_subnet = config.GetIntArray("class_subnet");
 
+    // optional: source-node allowlist per traffic class
+    vector<string> class_source = config.GetStrArray("class_source");
+    _class_source.resize(class_source.size());
+    for(size_t c = 0; c < class_source.size(); ++c) {
+        _class_source[c] = tokenize_int(class_source[c]);
+    }
+
     // ============ Message priorities ============ 
 
     string priority = config.GetStr( "priority" );
@@ -118,6 +125,12 @@ TrafficManager::TrafficManager( const Configuration &config, const vector<Networ
     // ============ Traffic ============ 
 
     _classes = config.GetInt("classes");
+    if(!_class_source.empty() && ((int)_class_source.size() != _classes)) {
+        ostringstream err;
+        err << "class_source must contain one source list per traffic class "
+            << "(got " << _class_source.size() << ", expected " << _classes << ").";
+        Error(err.str());
+    }
 
     _use_read_write = config.GetIntArray("use_read_write");
     if(_use_read_write.empty()) {
@@ -757,6 +770,20 @@ void TrafficManager::_RetireFlit( Flit *f, int dest )
 int TrafficManager::_IssuePacket( int source, int cl )
 {
     int result = 0;
+    if(!_class_source.empty()) {
+        assert(cl >= 0 && cl < (int)_class_source.size());
+        vector<int> const & sources = _class_source[cl];
+        bool allowed = false;
+        for(size_t i = 0; i < sources.size(); ++i) {
+            if(sources[i] == source) {
+                allowed = true;
+                break;
+            }
+        }
+        if(!allowed) {
+            return 0;
+        }
+    }
     if(_use_read_write[cl]){ //use read and write
         //check queue for waiting replies.
         //check to make sure it is on time yet
