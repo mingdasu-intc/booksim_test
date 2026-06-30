@@ -46,11 +46,17 @@ class AnyNet : public Network {
   //[router][dest_node]=port
   vector<map<int, int> > routing_table;
 
+  //when true buildRoutingTable() fills the table with XY dimension-order routing
+  //instead of Dijkstra; _anynet_cols is the mesh width (id = row*cols + col).
+  bool _xy_routing;
+  int _anynet_cols;
+
   void _ComputeSize( const Configuration &config );
   void _BuildNet( const Configuration &config );
   void readFile();
   void buildRoutingTable();
   void route(int r_start);
+  void routeXY(int r_start, int cols);
 
 public:
   AnyNet( const Configuration &config, const string & name );

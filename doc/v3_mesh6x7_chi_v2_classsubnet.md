@@ -1,7 +1,7 @@
 # 6x7 Mesh + CHI 建模 V2：按 class 分子网（class_subnet 补丁）
 
 > V1（基于 BookSim 原生消息类型的 4 子网映射）见
-> [`mesh6x7_chi_4channel.md`](mesh6x7_chi_4channel.md)，**保留不动**。
+> [`v2_mesh6x7_chi_4channel.md`](v2_mesh6x7_chi_4channel.md)，**保留不动**。
 > 本文是 V2：通过一处源码补丁让 subnet 直接按 traffic class 选，从而把
 > CHI 的 4 条通道与 BookSim 的"读/写消息类型"彻底解耦，并能建模**写一致性请求**。
 

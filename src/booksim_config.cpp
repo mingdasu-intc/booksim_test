@@ -221,6 +221,11 @@ BookSimConfig::BookSimConfig( )
   // by the traffic pattern.
   AddStrField("class_source", "");
 
+  // Optional: number of columns of an anynet mesh, used by the xy_anynet
+  // routing function to recover (row,col) from a router id (id = row*cols+col).
+  // Only consulted when routing_function = xy_anynet.
+  _int_map["anynet_cols"] = 0;
+
   // Set packet length in flits
   _int_map["read_request_size"]  = 1;
   AddStrField("read_request_size", ""); // workaraound to allow for vector specification

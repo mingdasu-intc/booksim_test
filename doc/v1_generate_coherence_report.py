@@ -2,8 +2,8 @@
 """Generate a PDF report comparing uniform vs hotspot cache-coherence traffic
 on the 6x7 BookSim mesh. Data come from utils/sweep.sh runs.
 
-Usage: python3 generate_coherence_report.py
-Output: mesh6x7_coherence_report.pdf (next to this script)
+Usage: python3 v1_generate_coherence_report.py
+Output: v1_mesh6x7_coherence_report.pdf (next to this script)
 """
 import os
 
@@ -50,7 +50,7 @@ h_thr = [p[1] for p in HOTSPOT]
 h_lat = [p[2] for p in HOTSPOT]
 
 out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "mesh6x7_coherence_report.pdf")
+                        "v1_mesh6x7_coherence_report.pdf")
 
 with PdfPages(out_path) as pdf:
     # ===================== Page 1: summary + bar chart =====================

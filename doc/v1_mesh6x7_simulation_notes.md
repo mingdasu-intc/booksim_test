@@ -15,7 +15,7 @@
 
 > 为什么用 `anynet` 而不是内置 `mesh`：内置 `mesh` 是对称的 k-ary n-cube（节点数 = k^n），只能做 k×k 方形网格，无法表示非对称的 6×7。`anynet` 通过拓扑文件显式描述 42 个节点的网格连接。
 
-拓扑结构图见 `mesh6x7_topology.png` / `.pdf`。路由器编号 `id = row×7 + col`；节点度数：角 2、边 3、内部 4。
+拓扑结构图见 `v1_mesh6x7_topology.png` / `.pdf`。路由器编号 `id = row×7 + col`；节点度数：角 2、边 3、内部 4。
 
 ---
 
@@ -32,11 +32,11 @@
 ### 文档与产物（`doc/`）
 | 文件 | 说明 |
 |---|---|
-| `mesh6x7_simulation_notes.md` | 本文档 |
-| `mesh6x7_topology.png` / `.pdf` | 网络结构图 |
-| `mesh6x7_coherence_report.pdf` | uniform vs hotspot 对比报告（2 页） |
-| `draw_mesh6x7.py` | 拓扑绘图脚本 |
-| `generate_coherence_report.py` | 对比报告生成脚本 |
+| `v1_mesh6x7_simulation_notes.md` | 本文档 |
+| `v1_mesh6x7_topology.png` / `.pdf` | 网络结构图 |
+| `v1_mesh6x7_coherence_report.pdf` | uniform vs hotspot 对比报告（2 页） |
+| `v1_draw_mesh6x7.py` | 拓扑绘图脚本 |
+| `v1_generate_coherence_report.py` | 对比报告生成脚本 |
 
 ---
 
@@ -154,7 +154,7 @@ cd booksim2/runfiles
 
 ## 6. 实验结果：uniform vs hotspot（一致性流量）
 
-对两个配置各做注入率扫描的结果（详见 `mesh6x7_coherence_report.pdf`）：
+对两个配置各做注入率扫描的结果（详见 `v1_mesh6x7_coherence_report.pdf`）：
 
 | 指标 | Uniform（分布式） | Hotspot（4 目录） | 差距 |
 |---|---|---|---|

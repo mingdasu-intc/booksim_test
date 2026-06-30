@@ -105,7 +105,7 @@ ax.set_ylim(-6.55, 1.35)
 ax.set_aspect("equal")
 ax.axis("off")
 
-base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mesh6x7_chi_sn_topology")
+base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v4_mesh6x7_chi_sn_topology")
 fig.savefig(base + ".png", dpi=140, bbox_inches="tight")
 fig.savefig(base + ".pdf", bbox_inches="tight")
 print("Wrote", base + ".png and .pdf")

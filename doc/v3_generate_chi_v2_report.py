@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the V2 (class_subnet) CHI mesh sweep into a PDF chart report.
 
-Reads runfiles/chi_v2_sweep_results.csv -> doc/mesh6x7_chi_v2_report.pdf (+ p1 PNG).
+Reads runfiles/chi_v2_sweep_results.csv -> doc/v3_mesh6x7_chi_v2_report.pdf (+ p1 PNG).
 Highlights that the shared DAT subnet (read-data + write-data) is the bottleneck.
 """
 import os, csv
@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 CSV = os.path.join(HERE, "..", "runfiles", "chi_v2_sweep_results.csv")
-OUT = os.path.join(HERE, "mesh6x7_chi_v2_report.pdf")
+OUT = os.path.join(HERE, "v3_mesh6x7_chi_v2_report.pdf")
 
 CH = [("REQ", "#2563eb", "o", "-"),
       ("DAT_rd", "#dc2626", "s", "-"),
@@ -67,7 +67,7 @@ with PdfPages(OUT) as pdf:
              "168 nodes (84 RN + 84 HN) | subnets=4 | 5 classes via class_subnet={0,1,2,3,1} | "
              "snoop=1.0, write_fraction=0.3",
              ha="center", fontsize=8.5, color="#444")
-    fig.savefig(os.path.join(HERE, "mesh6x7_chi_v2_report_p1.png"), dpi=110)
+    fig.savefig(os.path.join(HERE, "v3_mesh6x7_chi_v2_report_p1.png"), dpi=110)
     pdf.savefig(fig); plt.close(fig)
 
     # ---------- Page 2: channel map + data table ----------

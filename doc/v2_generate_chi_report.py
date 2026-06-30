@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the 4-channel CHI mesh injection-rate sweep into a PDF chart report.
 
-Reads runfiles/chi_sweep_results.csv and writes doc/mesh6x7_chi_4channel_report.pdf
+Reads runfiles/chi_sweep_results.csv and writes doc/v2_mesh6x7_chi_4channel_report.pdf
 (2 pages: latency-throughput curves + accepted-rate / data table).
 """
 import os, csv
@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 CSV = os.path.join(HERE, "..", "runfiles", "chi_sweep_results.csv")
-OUT = os.path.join(HERE, "mesh6x7_chi_4channel_report.pdf")
+OUT = os.path.join(HERE, "v2_mesh6x7_chi_4channel_report.pdf")
 
 off, lat0, acc0, lat1, acc1 = [], [], [], [], []
 sat_x = None
@@ -69,7 +69,7 @@ with PdfPages(OUT) as pdf:
              f"Saturation knee ~ offered {knee_x} / node / class   |   "
              f"168 nodes (84 RN + 84 HN), subnets=4, num_vcs=2",
              ha="center", fontsize=9, color="#444")
-    fig.savefig(os.path.join(HERE, "mesh6x7_chi_4channel_report_p1.png"), dpi=110)
+    fig.savefig(os.path.join(HERE, "v2_mesh6x7_chi_4channel_report_p1.png"), dpi=110)
     pdf.savefig(fig); plt.close(fig)
 
     # ---------- Page 2: channel mapping + data table ----------

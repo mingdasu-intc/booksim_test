@@ -202,6 +202,13 @@ void AnyNet::_BuildNet( const Configuration &config ){
     }
   }
 
+  // routing-table construction strategy (Dijkstra minimal by default, or XY).
+  // routing_function holds the base name ("xy"); BookSim appends "_anynet" when
+  // looking up the routing function, so accept both spellings here.
+  string rf = config.GetStr("routing_function");
+  _xy_routing = (rf == "xy" || rf == "xy_anynet");
+  _anynet_cols = config.GetInt("anynet_cols");
+
   buildRoutingTable();
 
 }
@@ -209,6 +216,9 @@ void AnyNet::_BuildNet( const Configuration &config ){
 
 void AnyNet::RegisterRoutingFunctions() {
   gRoutingFunctionMap["min_anynet"] = &min_anynet;
+  // xy_anynet reuses the same table reader; the table itself is built with
+  // dimension-order (X then Y) hops in buildRoutingTable().
+  gRoutingFunctionMap["xy_anynet"] = &min_anynet;
 }
 
 void min_anynet( const Router *r, const Flit *f, int in_channel, 
@@ -243,10 +253,62 @@ void min_anynet( const Router *r, const Flit *f, int in_channel,
 void AnyNet::buildRoutingTable(){
   cout<<"========================== Routing table  =====================\n";  
   routing_table.resize(_size);
-  for(int i = 0; i<_size; i++){
-    route(i);
+  if(_xy_routing){
+    if(_anynet_cols <= 0){
+      cout<<"AnyNet: routing_function=xy_anynet requires anynet_cols > 0"<<endl;
+      exit(-1);
+    }
+    if(_size % _anynet_cols != 0){
+      cout<<"AnyNet: router count "<<_size<<" is not a multiple of anynet_cols "
+          <<_anynet_cols<<"; cannot use xy_anynet."<<endl;
+      exit(-1);
+    }
+    cout<<"AnyNet: using XY dimension-order routing (cols="<<_anynet_cols<<")\n";
+    for(int i = 0; i<_size; i++){
+      routeXY(i, _anynet_cols);
+    }
+  } else {
+    for(int i = 0; i<_size; i++){
+      route(i);
+    }
   }
   global_routing_table = &routing_table[0];
+}
+
+//XY (dimension-order) routing for a mesh laid out as id = row*cols + col.
+//At each router the packet first resolves the column (X) difference, then the
+//row (Y) difference, giving a deterministic minimal, deadlock-free path.
+void AnyNet::routeXY(int r_start, int cols){
+  int sr = r_start / cols;
+  int sc = r_start % cols;
+  for(map<int,int>::iterator it = node_list.begin();
+      it != node_list.end(); ++it){
+    int dest_node   = it->first;
+    int dest_router = it->second;
+    int port;
+    if(dest_router == r_start){
+      //eject to the locally attached destination node
+      assert(router_list[0][r_start].count(dest_node) != 0);
+      port = router_list[0][r_start][dest_node].first;
+    } else {
+      int dr = dest_router / cols;
+      int dc = dest_router % cols;
+      int next_router;
+      if(sc != dc){
+        next_router = (dc > sc) ? (r_start + 1) : (r_start - 1);       //move in X
+      } else {
+        next_router = (dr > sr) ? (r_start + cols) : (r_start - cols); //move in Y
+      }
+      if(router_list[1][r_start].count(next_router) == 0){
+        cout<<"AnyNet XY: router "<<r_start<<" has no link to next-hop "
+            <<next_router<<" toward router "<<dest_router
+            <<"; topology is not a clean "<<cols<<"-wide mesh."<<endl;
+        exit(-1);
+      }
+      port = router_list[1][r_start][next_router].first;
+    }
+    routing_table[r_start][dest_node] = port;
+  }
 }
 
 

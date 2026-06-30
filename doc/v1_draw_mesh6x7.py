@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Draw the 6x7 (42-node) BookSim mesh topology.
 Router id = row*COLS + col (matches runfiles/mesh6x7_anynet).
-Output: mesh6x7_topology.png / .pdf next to this script.
+Output: v1_mesh6x7_topology.png / .pdf next to this script.
 """
 import os
 os.environ.setdefault(
@@ -101,7 +101,7 @@ ax.set_ylim(-6.4, 1.1)
 ax.set_aspect("equal")
 ax.axis("off")
 
-base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mesh6x7_topology")
+base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v1_mesh6x7_topology")
 fig.savefig(base + ".png", dpi=130, bbox_inches="tight")
 fig.savefig(base + ".pdf", bbox_inches="tight")
 print("Wrote", base + ".png and .pdf")

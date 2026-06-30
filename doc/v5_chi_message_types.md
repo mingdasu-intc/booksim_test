@@ -7,7 +7,7 @@ SN/DDR。
 
 > BookSim 没有 trace 注入模式，它"导入"的流量就是配置里的合成流量描述。
 > 生成器把**每种 CHI 消息类型编码成一个 traffic class**，借助 `class_subnet`
-> 源码补丁（见 [`mesh6x7_chi_v2_classsubnet.md`](mesh6x7_chi_v2_classsubnet.md)）
+> 源码补丁（见 [`v3_mesh6x7_chi_v2_classsubnet.md`](v3_mesh6x7_chi_v2_classsubnet.md)）
 > 把它落到对应 CHI 通道的物理子网上。
 
 ---
@@ -176,6 +176,62 @@ traffic        = {hotspot(终点角色的节点集合), ...};
 - `class_subnet` 控制 **走哪条物理通道**，例如 DAT 走 subnet 3。
 
 因此当前模型已经能准确表达 `RN->HN`、`HN->SN`、`SN->RN`、`SN->HN`、`RN->RN` 等角色方向。
+
+### Router / VC / Buffer / Arbitration 配置
+
+当前生成器默认输出如下 BookSim router 参数：
+
+```text
+num_vcs     = 2;
+vc_buf_size = 2;
+vc_allocator = islip;
+sw_allocator = separable_output_first(round_robin);
+```
+
+含义：
+
+- 每个输入端口有 `2` 个 VC。
+- 每个 VC buffer 深度为 `2` flit。
+- 输出 switch 仲裁使用 `separable_output_first(round_robin)`。BookSim 源码没有名为 `lrg` 的 allocator；
+  这里用输出端 round-robin arbiter 近似 LRG（Least Recently Granted）行为。
+- 参数可通过环境变量覆盖：
+  - `CHI_VCS`
+  - `CHI_VC_BUF_SIZE`
+  - `CHI_VC_ALLOCATOR`
+  - `CHI_SW_ALLOCATOR`
+
+拓扑方面，`anynet` 的 router 端口数由连接关系决定：普通内部 router 最多为
+`4 mesh links + 4 RN/HN terminals = 8` 个输入/输出端口；挂 SN 的顶行 router 为
+`3 mesh links + 4 RN/HN terminals + 1 SN = 8` 个输入/输出端口。
+
+### 路由算法（min / XY 可选）
+
+```text
+routing_function = min;       // 默认：Dijkstra 最小跳数表（确定性单路径）
+anynet_cols      = 7;         // mesh 宽度，供 XY 还原 (row,col)
+```
+
+- `min`（默认）：`anynet` 自带的 `min_anynet`，用 Dijkstra 预计算最小跳数路由表，
+  tie-break 由节点遍历顺序固定。
+- `xy`：维序（先 X 列、后 Y 行）确定性路由。通过环境变量 `CHI_ROUTING=xy` 让生成器
+  输出 `routing_function = xy`，BookSim 自动拼成 `xy_anynet`。
+
+  XY 需要源码补丁（已合入）：
+  - `src/networks/anynet.{hpp,cpp}`：新增 `routeXY()`，按 `id = row*cols + col` 计算
+    下一跳路由器并用 `router_list` 查端口；`buildRoutingTable()` 在 `routing_function=xy`
+    时改用 XY 填表；注册 `xy_anynet` 复用 `min_anynet` 读表器。
+  - `src/booksim_config.cpp`：新增整型字段 `anynet_cols`。
+  - 改完需在 `src/` 下 `make` 重新编译。
+
+  XY 是维序、无环，天然 deadlock-free。实测在拐点附近（`LAMBDA=0.0045`）XY 比 `min`
+  的 RSP/DAT 延迟更低（RSP 89.5→42.5、DAT 54.0→43.9 cycle），但根本饱和点仍≈`0.005`
+  （受 4 个 SN / 集中 HN 的弹出带宽限制）。
+
+  用法示例：
+
+```bash
+CHI_ROUTING=xy python3 gen_chi_traffic.py && ../src/booksim chi_traffic
+```
 
 ---
 
