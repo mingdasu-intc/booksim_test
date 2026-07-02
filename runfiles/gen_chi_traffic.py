@@ -27,6 +27,11 @@ VC_ALLOCATOR = os.environ.get("CHI_VC_ALLOCATOR", "islip")
 # routing base name: "min" = Dijkstra minimal table (default), "xy" = XY
 # dimension-order. BookSim appends "_anynet" to form the routing function name.
 ROUTING      = os.environ.get("CHI_ROUTING", "min")
+# sim convergence controls: raising these lets a near-saturation point still
+# produce steady-state stats instead of aborting on the default 500-cycle guard.
+# format as float so BookSim parses latency_thres as a float field
+LATENCY_THRES = repr(float(os.environ.get("CHI_LATENCY_THRES", 500.0)))
+MAX_SAMPLES   = int(os.environ.get("CHI_MAX_SAMPLES", 20))
 
 # ----- transaction mix knobs -----
 # CHI_LAMBDA is total transaction-start rate per node. Category, subtype, and
@@ -372,6 +377,8 @@ sim_type       = latency;
 sample_period  = 1000;
 warmup_periods = 3;
 sim_count      = 1;
+max_samples    = {MAX_SAMPLES};
+latency_thres  = {LATENCY_THRES};
 """
 cfg_path = os.path.join(here, "chi_traffic")
 with open(cfg_path, "w") as f:

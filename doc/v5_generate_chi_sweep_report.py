@@ -6,15 +6,20 @@ Output: v5_chi_subnet_sweep_report.pdf
         v5_chi_subnet_sweep_p1.png  (latency-throughput preview)
 
 Optional env:
-  SAT_ONSET   first total LAMBDA that drove the network unstable (for annotation)
+  SAT_ONSET     first total LAMBDA that drove the network unstable (for annotation)
+  SWEEP_CSV     input CSV name (default v5_chi_subnet_sweep.csv)
+  SWEEP_REPORT  output base name without extension (default v5_chi_subnet_sweep)
+  ROUTING_LABEL routing name shown in titles (default "min")
 """
 import csv
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CSV_IN = os.path.join(HERE, "v5_chi_subnet_sweep.csv")
-PDF_OUT = os.path.join(HERE, "v5_chi_subnet_sweep_report.pdf")
-PNG_OUT = os.path.join(HERE, "v5_chi_subnet_sweep_p1.png")
+CSV_IN = os.path.join(HERE, os.environ.get("SWEEP_CSV", "v5_chi_subnet_sweep.csv"))
+_BASE = os.environ.get("SWEEP_REPORT", "v5_chi_subnet_sweep")
+PDF_OUT = os.path.join(HERE, _BASE + "_report.pdf")
+PNG_OUT = os.path.join(HERE, _BASE + "_p1.png")
+ROUTING_LABEL = os.environ.get("ROUTING_LABEL", "min")
 SAT_ONSET = float(os.environ.get("SAT_ONSET", 0.005))
 
 os.environ.setdefault("MPLCONFIGDIR", os.path.join(HERE, ".mplcache"))
@@ -57,7 +62,8 @@ def load():
 
 def knee(points):
     """Last stable point and the point with the largest latency jump."""
-    stable = [p for p in points if p["flit_latency"] is not None]
+    stable = [p for p in points
+              if p["flit_latency"] is not None and p["state"] == "ok"]
     if not stable:
         return None, None
     last = stable[-1]
@@ -83,26 +89,48 @@ def main():
     with PdfPages(PDF_OUT) as pdf:
         # ---- page 1: latency-throughput + latency-vs-load ----
         fig = plt.figure(figsize=(8.27, 11.69))
-        fig.suptitle("CHI 4-Channel Latency-Throughput Sweep",
-                     fontsize=15, fontweight="bold", y=0.975)
+        fig.suptitle(f"CHI 4-Channel Latency-Throughput Sweep ({ROUTING_LABEL} routing)",
+                     fontsize=14, fontweight="bold", y=0.975)
+
+        def split(ch, xkey):
+            """Return (stable, unstable) [(x, lat), ...] plus the bridge point.
+
+            Unstable (UNSTBL) points come from the last periodic snapshot of a
+            diverging run: throughput is the sustained plateau, latency is a
+            lower bound on the (unbounded) queueing delay.
+            """
+            pts = [p for p in data[ch] if p["flit_latency"] is not None]
+            st = [(p[xkey], p["flit_latency"]) for p in pts if p["state"] == "ok"]
+            un = [(p[xkey], p["flit_latency"]) for p in pts if p["state"] != "ok"]
+            return st, un
 
         ax1 = fig.add_axes([0.12, 0.58, 0.80, 0.31])
         for ch in CHANNELS:
-            xs = [p["acc_flit"] for p in data[ch] if p["flit_latency"] is not None]
-            ys = [p["flit_latency"] for p in data[ch] if p["flit_latency"] is not None]
-            ax1.plot(xs, ys, "-o", color=COLORS[ch], label=f"{ch} (subnet {SUBNET[ch]})",
-                     markersize=4)
+            st, un = split(ch, "acc_flit")
+            if st:
+                xs, ys = zip(*st)
+                ax1.plot(xs, ys, "-o", color=COLORS[ch],
+                         label=f"{ch} (subnet {SUBNET[ch]})", markersize=4)
+            if un:
+                bridge = ([st[-1]] if st else []) + un
+                bx, by = zip(*bridge)
+                ax1.plot(bx, by, "--x", color=COLORS[ch], markersize=7, lw=1.2)
         ax1.set_xlabel("Accepted flit rate (flit / node / cycle)")
         ax1.set_ylabel("Flit latency (cycles)")
-        ax1.set_title("Latency vs delivered throughput, per channel")
+        ax1.set_title("Latency vs delivered throughput  (solid=stable, dashed x=unstable)")
         ax1.grid(alpha=0.25)
         ax1.legend(fontsize=9)
 
         ax2 = fig.add_axes([0.12, 0.16, 0.80, 0.30])
         for ch in CHANNELS:
-            xs = [p["lambda"] for p in data[ch] if p["flit_latency"] is not None]
-            ys = [p["flit_latency"] for p in data[ch] if p["flit_latency"] is not None]
-            ax2.plot(xs, ys, "-o", color=COLORS[ch], label=ch, markersize=4)
+            st, un = split(ch, "lambda")
+            if st:
+                xs, ys = zip(*st)
+                ax2.plot(xs, ys, "-o", color=COLORS[ch], label=ch, markersize=4)
+            if un:
+                bridge = ([st[-1]] if st else []) + un
+                bx, by = zip(*bridge)
+                ax2.plot(bx, by, "--x", color=COLORS[ch], markersize=7, lw=1.2)
         ax2.axvline(SAT_ONSET, color="#64748b", ls="--", lw=1.2)
         ax2.text(SAT_ONSET, ax2.get_ylim()[1] * 0.92,
                  f" unstable >= {SAT_ONSET:g}", color="#475569", fontsize=8)
@@ -122,9 +150,15 @@ def main():
 
         ax3 = fig.add_axes([0.12, 0.58, 0.80, 0.31])
         for ch in CHANNELS:
-            xs = [p["lambda"] for p in data[ch] if p["acc_flit"] is not None]
-            ys = [p["acc_flit"] for p in data[ch] if p["acc_flit"] is not None]
-            ax3.plot(xs, ys, "-o", color=COLORS[ch], label=ch, markersize=4)
+            pts = [p for p in data[ch] if p["acc_flit"] is not None]
+            st = [(p["lambda"], p["acc_flit"]) for p in pts if p["state"] == "ok"]
+            un = [(p["lambda"], p["acc_flit"]) for p in pts if p["state"] != "ok"]
+            if st:
+                xs, ys = zip(*st)
+                ax3.plot(xs, ys, "-o", color=COLORS[ch], label=ch, markersize=4)
+            if un:
+                bx, by = zip(*(([st[-1]] if st else []) + un))
+                ax3.plot(bx, by, "--x", color=COLORS[ch], markersize=7, lw=1.2)
         ax3.axvline(SAT_ONSET, color="#64748b", ls="--", lw=1.2)
         ax3.set_xlabel("Total transaction rate LAMBDA")
         ax3.set_ylabel("Accepted flit rate (flit / node / cycle)")
@@ -182,6 +216,7 @@ def main():
         )
         rec = [
             f"Network saturates near LAMBDA ~ {SAT_ONSET:g} txn/node/cycle; the next swept point goes unstable (latency > 500 cycles).",
+            "Dashed 'x' points (LAMBDA >= saturation) are the last periodic snapshot of a non-converged run: throughput = sustained plateau, latency = lower bound on unbounded queueing.",
             f"First channels to bend up are {rise[0]} and {rise[1]} (subnets {SUBNET[rise[0]]}/{SUBNET[rise[1]]}); REQ and SNP stay flat to the knee.",
             "Saturation accepted throughput is low (~0.003 flit/node/cycle/channel), so the limiter is destination hotspot concentration, not mesh bisection.",
             "DAT carries 2-flit payloads and concentrates on the 4 SN nodes (DMT reads, L3 evictions, CleanInvalid writeback); those 4 ejection links throttle DAT first.",
@@ -195,8 +230,8 @@ def main():
         fig.text(0.06, 0.50, text, fontsize=9.5, va="top",
                  bbox=dict(boxstyle="round", fc="#f8fafc", ec="#cbd5e1"))
         fig.text(0.5, 0.04,
-                 "Config: 4 subnets (REQ/RSP/SNP/DAT), 2 VCs/input, 2-flit VC buffers, "
-                 "output-first round-robin arbitration, 6x7 mesh + 4 DDR SN.",
+                 f"Config: {ROUTING_LABEL} routing, 4 subnets (REQ/RSP/SNP/DAT), 2 VCs/input, "
+                 "2-flit VC buffers, output-first round-robin arbitration, 6x7 mesh + 4 DDR SN.",
                  ha="center", fontsize=8.5, color="#475569")
         pdf.savefig(fig)
         plt.close(fig)

@@ -24,7 +24,9 @@ BOOKSIM = os.path.join(ROOT, "src", "booksim")
 GEN = os.path.join(HERE, "gen_chi_traffic.py")
 CFG = os.path.join(HERE, "chi_traffic")
 DOC = os.path.join(ROOT, "doc")
-CSV_OUT = os.path.join(DOC, "v5_chi_subnet_sweep.csv")
+# Output CSV name is configurable so a routing variant (e.g. XY) can be swept
+# without clobbering the default min-routing results. Override with SWEEP_OUT.
+CSV_OUT = os.path.join(DOC, os.environ.get("SWEEP_OUT", "v5_chi_subnet_sweep.csv"))
 
 CHANNELS = ["REQ", "RSP", "SNP", "DAT"]
 SUBNET_CHANNEL = {0: "REQ", 1: "RSP", 2: "SNP", 3: "DAT"}
@@ -101,6 +103,47 @@ def parse_overall(log):
     return out
 
 
+def parse_last_display(log):
+    """Fallback for saturated runs that never print the Overall block.
+
+    BookSim's DisplayStats() dumps the same per-class fields every sample
+    period. When the run aborts (latency diverges) we recover the *last*
+    snapshot: accepted rates give the sustained (plateau) throughput and the
+    latency averages reflect the divergence at that offered load.
+    """
+    field_pat = {
+        "plat": re.compile(r"^Packet latency average = ([0-9.eE+-]+|nan)"),
+        "flat": re.compile(r"^Flit latency average = ([0-9.eE+-]+|nan)"),
+        "inj_pkt": re.compile(r"^Injected packet rate average = ([0-9.eE+-]+)"),
+        "acc_pkt": re.compile(r"^Accepted packet rate average = ([0-9.eE+-]+)"),
+        "inj_flit": re.compile(r"^Injected flit rate average = ([0-9.eE+-]+)"),
+        "acc_flit": re.compile(r"^Accepted flit rate average\s*=\s*([0-9.eE+-]+)"),
+    }
+    class_re = re.compile(r"^Class (\d+):\s*$")
+    out = {}
+    cur = None
+    for line in log.splitlines():
+        m = class_re.match(line)
+        if m:
+            cur = int(m.group(1))
+            continue
+        if cur is None:
+            continue
+        for key, pat in field_pat.items():
+            mm = pat.match(line)
+            if mm:
+                v = mm.group(1)
+                row = out.setdefault(cur, {})
+                row[key] = None if v.lower() == "nan" else float(v)
+                break
+    # require at least one class with an accepted-flit reading
+    if not any("acc_flit" in r for r in out.values()):
+        return None
+    for r in out.values():
+        r.setdefault("hops", None)
+    return out
+
+
 def wavg(rows, val_key, w_key):
     num = den = 0.0
     for r in rows:
@@ -154,6 +197,12 @@ def main():
             continue
         saturated = ("Simulation unstable" in log) or ("Aborting simulation" in log)
         stats = parse_overall(log)
+        unstable = False
+        if stats is None:
+            # no converged Overall block: recover the last periodic snapshot so
+            # the saturated point still contributes a plateau-throughput sample.
+            stats = parse_last_display(log)
+            unstable = True
         if stats is None:
             print(f"{lam:>8} {'NODATA':>6} |")
             sat_streak += 1
@@ -161,7 +210,7 @@ def main():
                 break
             continue
         agg = aggregate(subnet, size, stats)
-        state = "SAT" if saturated else "ok"
+        state = "UNSTBL" if unstable else ("SAT" if saturated else "ok")
         cells = []
         for ch in CHANNELS:
             a = agg[ch]
@@ -192,9 +241,13 @@ def main():
                     "flit_latency", "hops"])
         w.writerows(rows)
     print(f"\nWrote {CSV_OUT} ({len(rows)} rows)")
-    # restore baseline config so the repo's chi_traffic matches the single-point report
-    regen(float(os.environ.get("CHI_BASE_LAMBDA", 0.001)))
-    print("Restored baseline chi_traffic (CHI_LAMBDA=0.001)")
+    # restore the documented baseline config (min routing, CHI_LAMBDA=0.001)
+    # regardless of the routing used during the sweep.
+    base_env = dict(os.environ, CHI_LAMBDA=repr(float(os.environ.get("CHI_BASE_LAMBDA", 0.001))),
+                    CHI_ROUTING="min")
+    subprocess.run(["python3", GEN], env=base_env, cwd=HERE,
+                   capture_output=True, check=True)
+    print("Restored baseline chi_traffic (routing=min, CHI_LAMBDA=0.001)")
 
 
 if __name__ == "__main__":
