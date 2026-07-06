@@ -15,6 +15,7 @@ Env:
   SWEEP_LAMBDAS  offered-load points (default covers read+write plateaus)
   SWEEP_OUT      output csv name in doc/
 Baseline knobs (routing=xy, link_latency=2) are fixed; buffer is the variable.
+  CHI_DATA_FLITS  DAT packet size in flits (default from gen_chi_traffic = 2)
 """
 import csv
 import os
@@ -28,7 +29,11 @@ CSV_OUT = os.path.join(DOC, os.environ.get("SWEEP_OUT", "v6_repair_vc_buf_sweep.
 DEFAULT_BUFS = [2, 4, 8, 16, 32]
 DEFAULT_LAMBDAS = [0.02, 0.03, 0.05, 0.08, 0.12, 0.2, 0.3, 0.5, 0.8]
 
-BASE = {"CHI_ROUTING": "xy", "CHI_LINK_LATENCY": "2"}
+BASE = {
+    "CHI_ROUTING": "xy",
+    "CHI_LINK_LATENCY": "2",
+    "CHI_DATA_FLITS": os.environ.get("CHI_DATA_FLITS", "2"),
+}
 READ_MIX = {
     "CHI_READ_RATIO": "100", "CHI_WRITE_RATIO": "0",
     "CHI_DATALESS_RATIO": "0", "CHI_CMO_RATIO": "0",
@@ -126,9 +131,12 @@ def main():
     print(f"\nWrote {CSV_OUT} ({len(rows)} rows)")
 
     # restore persisted baseline (default ratios, buf=2, xy, latency=2, LAMBDA=0.001)
-    set_chi_env({"CHI_ROUTING": "xy", "CHI_LINK_LATENCY": "2", "CHI_LAMBDA": "0.001"})
+    # restore persisted baseline (default ratios, buf=2, data_flits=2, xy, LAMBDA=0.001)
+    set_chi_env({"CHI_ROUTING": "xy", "CHI_LINK_LATENCY": "2",
+                 "CHI_VC_BUF_SIZE": "2", "CHI_LAMBDA": "0.001"})
     S.regen(0.001)
-    print("Restored baseline chi_traffic (routing=xy, link_latency=2, vc_buf_size=2, LAMBDA=0.001)")
+    print("Restored baseline chi_traffic (routing=xy, link_latency=2, "
+          "data_flits=2, vc_buf_size=2, LAMBDA=0.001)")
 
 
 if __name__ == "__main__":
