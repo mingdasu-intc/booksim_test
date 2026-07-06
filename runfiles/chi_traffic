@@ -139,7 +139,7 @@
 
 topology     = anynet;
 network_file = chi_traffic_anynet;
-routing_function = min;
+routing_function = xy;
 anynet_cols  = 7;   // mesh width, used by xy_anynet to recover (row,col)
 
 classes        = 129;

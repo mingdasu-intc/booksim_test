@@ -27,6 +27,10 @@ VC_ALLOCATOR = os.environ.get("CHI_VC_ALLOCATOR", "islip")
 # routing base name: "min" = Dijkstra minimal table (default), "xy" = XY
 # dimension-order. BookSim appends "_anynet" to form the routing function name.
 ROUTING      = os.environ.get("CHI_ROUTING", "min")
+# inter-router (router<->router) link latency in cycles. anynet stores this per
+# directed link in the topology file (default 1 when omitted); we emit all four
+# neighbours with the weight so the latency is symmetric in both directions.
+LINK_LAT     = int(os.environ.get("CHI_LINK_LATENCY", 1))
 # sim convergence controls: raising these lets a near-saturation point still
 # produce steady-state stats instead of aborting on the default 500-cycle guard.
 # format as float so BookSim parses latency_thres as a float field
@@ -138,10 +142,14 @@ for r in range(ROWS):
         parts = [f"router {i}"] + [f"node {base + k}" for k in range(PER)]
         if i in sn_routers:
             parts.append(f"node {sn_nodes[sn_routers.index(i)]}")
-        if c + 1 < COLS:
-            parts.append(f"router {rid(r, c+1)}")
-        if r + 1 < ROWS:
-            parts.append(f"router {rid(r+1, c)}")
+        # list all four mesh neighbours with the link weight so router<->router
+        # latency is symmetric (anynet router-router latency is per-directed-link).
+        for nb in ((rid(r, c + 1) if c + 1 < COLS else None),   # east
+                   (rid(r, c - 1) if c - 1 >= 0 else None),     # west
+                   (rid(r + 1, c) if r + 1 < ROWS else None),   # south
+                   (rid(r - 1, c) if r - 1 >= 0 else None)):    # north
+            if nb is not None:
+                parts.append(f"router {nb} {LINK_LAT}")
         lines.append(" ".join(parts))
 topo_path = os.path.join(here, "chi_traffic_anynet")
 with open(topo_path, "w") as f:
