@@ -338,7 +338,10 @@ for m in messages:
     src_nodes = role_set[m["src"]]
     dst_nodes = role_set[m["dst"]]
     class_source.append("{" + ",".join(map(str, src_nodes)) + "}")
-    traffic.append("hotspot({" + ",".join(map(str, dst_nodes)) + "})")
+    # NOTE: double braces are required. BookSim's tokenize_str strips one brace
+    # level, so hotspot({a,b,c}) collapses to params[0]=a (single hotspot). The
+    # inner {{...}} keeps the whole node list as params[0] -> uniform over the set.
+    traffic.append("hotspot({{" + ",".join(map(str, dst_nodes)) + "}})")
 
 comment_rows = "\n".join(
     f"//   c{i:<2} {m['category']}.{m['subtype']}.{m['message']:<26} "

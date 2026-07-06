@@ -85,7 +85,8 @@ def read_traffic_dst(txt):
     m = re.search(r"traffic\s*=\s*\{(.*?)\}\s*;", txt, re.S)
     if not m:
         raise RuntimeError("traffic not found in config")
-    dsts = re.findall(r"hotspot\(\{([^}]*)\}\)", m.group(1))
+    # tolerate both hotspot({..}) and the correct double-brace hotspot({{..}})
+    dsts = re.findall(r"hotspot\(\{+([^{}]*)\}+\)", m.group(1))
     return [set(int(x) for x in s.split(",") if x.strip()) for s in dsts]
 
 

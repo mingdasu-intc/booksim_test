@@ -22,8 +22,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CURRENT_CSV = os.path.join(HERE, os.environ.get("CURRENT_CSV", "v6_sn_throughput_current.csv"))
 READ_CSV = os.path.join(HERE, os.environ.get("READ_CSV", "v6_sn_read_ceiling.csv"))
 WRITE_CSV = os.path.join(HERE, os.environ.get("WRITE_CSV", "v6_sn_write_ceiling.csv"))
-PDF_OUT = os.path.join(HERE, "v6_sn_throughput_report.pdf")
-PNG_OUT = os.path.join(HERE, "v6_sn_throughput_p1.png")
+PDF_OUT = os.path.join(HERE, os.environ.get("REPORT_PDF", "v6_sn_throughput_report.pdf"))
+PNG_OUT = os.path.join(HERE, os.environ.get("REPORT_PNG", "v6_sn_throughput_p1.png"))
 
 LINK_CEILING = 1.0     # flit/cycle per SN terminal link
 FLIT_BYTES = 16
