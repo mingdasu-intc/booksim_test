@@ -11,11 +11,13 @@ Uses BookSim stats_out per-node sent_flits / accepted_flits to report, for the
 Also records the existing E2E DAT metrics from sweep_sn_throughput for contrast.
 
 Output: ../doc/<SWEEP_OUT>  (default v6_repair_sn_local_peak.csv)
-Env: SWEEP_OUT, SWEEP_BUFS, SWEEP_LAMBDAS, CHI_DATA_FLITS, plus CHI_* mix knobs.
+         ../doc/stats_out/<mix>_buf<N>_D<D>_lam<L>_sn_local_stats.m  (per CSV row)
+Env: SWEEP_OUT, SWEEP_STATS_DIR, SWEEP_BUFS, SWEEP_LAMBDAS, CHI_DATA_FLITS, plus CHI_* mix knobs.
 """
 import csv
 import os
 import re
+import shutil
 import subprocess
 
 import sweep_sn_throughput as S
@@ -23,6 +25,7 @@ import sweep_sn_throughput as S
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOC = os.path.join(os.path.dirname(HERE), "doc")
 CSV_OUT = os.path.join(DOC, os.environ.get("SWEEP_OUT", "v6_repair_sn_local_peak.csv"))
+STATS_OUT_DIR = os.path.join(DOC, os.environ.get("SWEEP_STATS_DIR", "stats_out"))
 STATS_M = os.path.join(HERE, "sn_local_stats.m")
 
 BASE = {
@@ -192,8 +195,14 @@ def run_once(lam, buf, mix_env):
     }
 
 
-def best_row(mix_name, buf, lambdas, mix_env):
-    """Keep the lambda with highest SN-local DAT peak."""
+def stats_archive_name(mix_name, buf, lam, data_flits):
+    lam_s = f"{lam:g}".replace(".", "p")
+    return f"{mix_name}_buf{buf}_D{data_flits}_lam{lam_s}_sn_local_stats.m"
+
+
+def best_row(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
+    """Keep the lambda with highest SN-local DAT peak; archive its stats_out."""
+    prefix = f"{mix_name}_buf{buf}_D{data_flits}_lam"
     best = None
     for lam in lambdas:
         r = run_once(lam, buf, mix_env)
@@ -201,7 +210,22 @@ def best_row(mix_name, buf, lambdas, mix_env):
         if peak is None:
             continue
         if best is None or peak > best["row_dat"][1]:
-            best = {**r, "mix": mix_name, "buf": buf}
+            if best and best.get("stats_path"):
+                try:
+                    os.remove(best["stats_path"])
+                except OSError:
+                    pass
+            stats_name = stats_archive_name(mix_name, buf, lam, data_flits)
+            stats_path = os.path.join(stats_dir, stats_name)
+            if os.path.exists(STATS_M):
+                shutil.copy2(STATS_M, stats_path)
+            best = {
+                **r, "mix": mix_name, "buf": buf,
+                "stats_file": os.path.join(os.path.basename(stats_dir), stats_name),
+                "stats_path": stats_path,
+            }
+    if best:
+        del best["stats_path"]
     return best
 
 
@@ -210,13 +234,17 @@ def main():
     lambdas = parse_list("SWEEP_LAMBDAS", DEFAULT_LAMBDAS, float)
     data_flits = os.environ.get("CHI_DATA_FLITS", "2")
 
+    os.makedirs(STATS_OUT_DIR, exist_ok=True)
+    for fn in os.listdir(STATS_OUT_DIR):
+        if fn.endswith("_sn_local_stats.m"):
+            os.remove(os.path.join(STATS_OUT_DIR, fn))
     rows = []
     print(f"{'mix':>5} {'buf':>3} {'lam':>5} {'st':>6} | "
           f"{'SNlocalDAT':>10} {'SNavgDAT':>8} {'E2Eutil':>8} | "
           f"{'SNlocalREQ':>10} {'SNavgREQ':>8}")
     for buf in bufs:
         for mix_name, mix_env in (("read", READ_MIX), ("write", WRITE_MIX)):
-            b = best_row(mix_name, buf, lambdas, mix_env)
+            b = best_row(mix_name, buf, lambdas, mix_env, STATS_OUT_DIR, data_flits)
             if not b:
                 continue
             pk, av, e2e = b["row_dat"][1], b["row_dat"][2], b["row_dat"][3]
@@ -230,6 +258,7 @@ def main():
                 pk, av, e2e,
                 rpk, rav,
                 b["row_dat"][0], b["row_req"][0],
+                b.get("stats_file", ""),
             ])
 
     os.makedirs(DOC, exist_ok=True)
@@ -241,9 +270,11 @@ def main():
             "sn_dat_peak", "sn_dat_avg", "e2e_dat_util",
             "sn_req_peak", "sn_req_avg",
             "dat_metric", "req_metric",
+            "stats_file",
         ])
         w.writerows(rows)
     print(f"\nWrote {CSV_OUT} ({len(rows)} rows)")
+    print(f"Archived stats_out -> {STATS_OUT_DIR}/")
 
     set_chi_env({"CHI_ROUTING": "xy", "CHI_LINK_LATENCY": "2",
                  "CHI_VC_BUF_SIZE": "2", "CHI_LAMBDA": "0.001"})

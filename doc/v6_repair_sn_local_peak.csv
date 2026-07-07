@@ -1,5 +1,5 @@
-mix,vc_buf_size,data_flits,lambda,state,dat_class,req_sn_class,sn_dat_peak,sn_dat_avg,e2e_dat_util,sn_req_peak,sn_req_avg,dat_metric,req_metric
-read,2,2,0.8,UNSTBL,2,1,0.357,0.34750000000000003,0.33399992,0.534,0.516,read_dat_sent_max,read_req_acc_max
-write,2,2,0.5,UNSTBL,5,4,0.552,0.4922500000000001,0.4922511,0.541,0.51225,write_dat_acc_max,write_req_acc_max
-read,8,2,0.5,UNSTBL,2,1,0.812,0.7395,0.694751,0.775,0.76575,read_dat_sent_max,read_req_acc_max
-write,8,2,0.05,UNSTBL,5,4,0.911,0.90525,0.9052489,0.7405,0.727,write_dat_acc_max,write_req_acc_max
+mix,vc_buf_size,data_flits,lambda,state,dat_class,req_sn_class,sn_dat_peak,sn_dat_avg,e2e_dat_util,sn_req_peak,sn_req_avg,dat_metric,req_metric,stats_file
+read,2,2,0.8,UNSTBL,2,1,0.357,0.34750000000000003,0.33399992,0.534,0.516,read_dat_sent_max,read_req_acc_max,stats_out/read_buf2_D2_lam0p8_sn_local_stats.m
+write,2,2,0.5,UNSTBL,5,4,0.552,0.4922500000000001,0.4922511,0.541,0.51225,write_dat_acc_max,write_req_acc_max,stats_out/write_buf2_D2_lam0p5_sn_local_stats.m
+read,8,2,0.5,UNSTBL,2,1,0.812,0.7395,0.694751,0.775,0.76575,read_dat_sent_max,read_req_acc_max,stats_out/read_buf8_D2_lam0p5_sn_local_stats.m
+write,8,2,0.05,UNSTBL,5,4,0.911,0.90525,0.9052489,0.7405,0.727,write_dat_acc_max,write_req_acc_max,stats_out/write_buf8_D2_lam0p05_sn_local_stats.m
