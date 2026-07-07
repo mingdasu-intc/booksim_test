@@ -1,0 +1,4 @@
+lambda,state,n_sn,read_acc_per_sn,read_acc_total,read_inj_per_sn,read_inj_total,read_util,read_flat,write_acc_per_sn,write_acc_total,write_inj_per_sn,write_inj_total,write_util,write_flat
+0.005,ok,4,0.0,0,0.0,0,0.0,,0.20245002,0.80980008,0.20275015999999998,0.8110006399999999,0.20245002,35.0324
+0.01,ok,4,0.0,0,0.0,0,0.0,,0.42425004,1.69700016,0.42631231999999997,1.7052492799999999,0.42425004,36.0333
+0.02,UNSTBL,4,0.0,0,0.0,0,0.0,,0.7796717,3.1186868,0.7812971,3.1251884,0.7796717,112.571
