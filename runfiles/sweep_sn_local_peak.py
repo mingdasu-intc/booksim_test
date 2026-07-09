@@ -10,9 +10,10 @@ Uses BookSim stats_out per-node sent_flits / accepted_flits to report, for the
 
 Also records the existing E2E DAT metrics from sweep_sn_throughput for contrast.
 
-Output: ../doc/<SWEEP_OUT>  (default v6_repair_sn_local_peak.csv)
-         ../doc/stats_out/<mix>_buf<N>_D<D>_lam<L>_sn_local_stats.m  (per CSV row)
-Env: SWEEP_OUT, SWEEP_STATS_DIR, SWEEP_BUFS, SWEEP_LAMBDAS, CHI_DATA_FLITS, plus CHI_* mix knobs.
+Output: ../doc/<SWEEP_OUT>  (default v6_repair_sn_local_peak.csv) — best λ per mix/buf
+         ../doc/<SWEEP_ALL_OUT or {SWEEP_OUT stem}_sweep.csv> — all λ points
+         ../doc/stats_out/<mix>_buf<N>_D<D>_lam<L>_sn_local_stats.m  (best λ only)
+Env: SWEEP_OUT, SWEEP_ALL_OUT, SWEEP_STATS_DIR, SWEEP_BUFS, SWEEP_LAMBDAS, CHI_DATA_FLITS, plus CHI_* mix knobs.
 """
 import csv
 import os
@@ -25,6 +26,8 @@ import sweep_sn_throughput as S
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOC = os.path.join(os.path.dirname(HERE), "doc")
 CSV_OUT = os.path.join(DOC, os.environ.get("SWEEP_OUT", "v6_repair_sn_local_peak.csv"))
+_all_default = os.path.splitext(os.environ.get("SWEEP_OUT", "v6_repair_sn_local_peak.csv"))[0] + "_sweep.csv"
+ALL_CSV_OUT = os.path.join(DOC, os.environ.get("SWEEP_ALL_OUT", _all_default))
 STATS_OUT_DIR = os.path.join(DOC, os.environ.get("SWEEP_STATS_DIR", "stats_out"))
 STATS_M = os.path.join(HERE, "sn_local_stats.m")
 
@@ -200,16 +203,29 @@ def stats_archive_name(mix_name, buf, lam, data_flits):
     return f"{mix_name}_buf{buf}_D{data_flits}_lam{lam_s}_sn_local_stats.m"
 
 
-def best_row(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
-    """Keep the lambda with highest SN-local DAT peak; archive its stats_out."""
-    prefix = f"{mix_name}_buf{buf}_D{data_flits}_lam"
+def sweep_mix(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
+    """Run all lambdas; archive stats_out for best SN-local DAT peak only."""
     best = None
+    all_rows = []
     for lam in lambdas:
         r = run_once(lam, buf, mix_env)
         peak = r["row_dat"][1]
+        avg = r["row_dat"][2]
+        e2e = r["row_dat"][3]
+        rpk = r["row_req"][1]
+        rav = r["row_req"][2]
         if peak is None:
             continue
-        if best is None or peak > best["row_dat"][1]:
+        all_rows.append({
+            "mix": mix_name, "buf": buf, "data_flits": data_flits,
+            "lam": lam, "state": r["state"],
+            "dat_cls": r["dat_cls"], "req_cls": r["req_cls"],
+            "sn_dat_peak": peak, "sn_dat_avg": avg, "e2e_dat_util": e2e,
+            "sn_req_peak": rpk, "sn_req_avg": rav,
+            "dat_metric": r["row_dat"][0], "req_metric": r["row_req"][0],
+            "stats_file": "",
+        })
+        if best is None or peak > best["sn_dat_peak"]:
             if best and best.get("stats_path"):
                 try:
                     os.remove(best["stats_path"])
@@ -220,13 +236,17 @@ def best_row(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
             if os.path.exists(STATS_M):
                 shutil.copy2(STATS_M, stats_path)
             best = {
-                **r, "mix": mix_name, "buf": buf,
+                **all_rows[-1],
                 "stats_file": os.path.join(os.path.basename(stats_dir), stats_name),
                 "stats_path": stats_path,
             }
     if best:
         del best["stats_path"]
-    return best
+        for row in all_rows:
+            if row["lam"] == best["lam"]:
+                row["stats_file"] = best["stats_file"]
+                break
+    return best, all_rows
 
 
 def main():
@@ -239,16 +259,18 @@ def main():
         if fn.endswith("_sn_local_stats.m"):
             os.remove(os.path.join(STATS_OUT_DIR, fn))
     rows = []
+    sweep_rows = []
     print(f"{'mix':>5} {'buf':>3} {'lam':>5} {'st':>6} | "
           f"{'SNlocalDAT':>10} {'SNavgDAT':>8} {'E2Eutil':>8} | "
           f"{'SNlocalREQ':>10} {'SNavgREQ':>8}")
     for buf in bufs:
         for mix_name, mix_env in (("read", READ_MIX), ("write", WRITE_MIX)):
-            b = best_row(mix_name, buf, lambdas, mix_env, STATS_OUT_DIR, data_flits)
+            b, all_pts = sweep_mix(mix_name, buf, lambdas, mix_env, STATS_OUT_DIR, data_flits)
+            sweep_rows.extend(all_pts)
             if not b:
                 continue
-            pk, av, e2e = b["row_dat"][1], b["row_dat"][2], b["row_dat"][3]
-            rpk, rav = b["row_req"][1], b["row_req"][2]
+            pk, av, e2e = b["sn_dat_peak"], b["sn_dat_avg"], b["e2e_dat_util"]
+            rpk, rav = b["sn_req_peak"], b["sn_req_avg"]
             print(f"{mix_name:>5} {buf:>3} {b['lam']:>5.3f} {b['state']:>6} | "
                   f"{(pk or 0):10.4f} {(av or 0):8.4f} {(e2e or 0):8.1%} | "
                   f"{(rpk or 0):10.4f} {(rav or 0):8.4f}")
@@ -257,23 +279,39 @@ def main():
                 b["dat_cls"], b["req_cls"],
                 pk, av, e2e,
                 rpk, rav,
-                b["row_dat"][0], b["row_req"][0],
+                b["dat_metric"], b["req_metric"],
                 b.get("stats_file", ""),
             ])
+
+    header = [
+        "mix", "vc_buf_size", "data_flits", "lambda", "state",
+        "dat_class", "req_sn_class",
+        "sn_dat_peak", "sn_dat_avg", "e2e_dat_util",
+        "sn_req_peak", "sn_req_avg",
+        "dat_metric", "req_metric",
+        "stats_file",
+    ]
+    def to_csv_row(r):
+        return [
+            r["mix"], r["buf"], r["data_flits"], r["lam"], r["state"],
+            r["dat_cls"], r["req_cls"],
+            r["sn_dat_peak"], r["sn_dat_avg"], r["e2e_dat_util"],
+            r["sn_req_peak"], r["sn_req_avg"],
+            r["dat_metric"], r["req_metric"],
+            r.get("stats_file", ""),
+        ]
 
     os.makedirs(DOC, exist_ok=True)
     with open(CSV_OUT, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow([
-            "mix", "vc_buf_size", "data_flits", "lambda", "state",
-            "dat_class", "req_sn_class",
-            "sn_dat_peak", "sn_dat_avg", "e2e_dat_util",
-            "sn_req_peak", "sn_req_avg",
-            "dat_metric", "req_metric",
-            "stats_file",
-        ])
+        w.writerow(header)
         w.writerows(rows)
     print(f"\nWrote {CSV_OUT} ({len(rows)} rows)")
+    with open(ALL_CSV_OUT, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        w.writerows(to_csv_row(r) for r in sweep_rows)
+    print(f"Wrote {ALL_CSV_OUT} ({len(sweep_rows)} rows)")
     print(f"Archived stats_out -> {STATS_OUT_DIR}/")
 
     set_chi_env({"CHI_ROUTING": "xy", "CHI_LINK_LATENCY": "2",

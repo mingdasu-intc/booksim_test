@@ -162,5 +162,6 @@ sim_type       = latency;
 sample_period  = 1000;
 warmup_periods = 3;
 sim_count      = 1;
-max_samples    = 20;
+max_samples    = 50;
 latency_thres  = 500.0;
+stats_out = sn_local_stats.m;

@@ -35,7 +35,8 @@ LINK_LAT     = int(os.environ.get("CHI_LINK_LATENCY", 1))
 # produce steady-state stats instead of aborting on the default 500-cycle guard.
 # format as float so BookSim parses latency_thres as a float field
 LATENCY_THRES = repr(float(os.environ.get("CHI_LATENCY_THRES", 500.0)))
-MAX_SAMPLES   = int(os.environ.get("CHI_MAX_SAMPLES", 20))
+MAX_SAMPLES   = int(os.environ.get("CHI_MAX_SAMPLES", 50))
+STATS_OUT     = os.environ.get("CHI_STATS_OUT", "sn_local_stats.m")
 
 # ----- transaction mix knobs -----
 # CHI_LAMBDA is total transaction-start rate per node. Category, subtype, and
@@ -414,6 +415,8 @@ sim_count      = 1;
 max_samples    = {MAX_SAMPLES};
 latency_thres  = {LATENCY_THRES};
 """
+if STATS_OUT:
+    cfg += f"stats_out = {STATS_OUT};\n"
 cfg_path = os.path.join(here, "chi_traffic")
 with open(cfg_path, "w") as f:
     f.write(cfg)
