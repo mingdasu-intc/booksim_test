@@ -8,7 +8,7 @@ Uses BookSim stats_out per-node sent_flits / accepted_flits to report, for the
   write ceiling DAT L3EvictData (SN dest)   -> max accepted_flits/cycle at SN (eject)
   both          REQ to SN                   -> max accepted_flits/cycle at SN (eject)
 
-Also records the existing E2E DAT metrics from sweep_sn_throughput for contrast.
+Also records optional E2E DAT metrics parsed from the BookSim log.
 
 Output: ../doc/<SWEEP_OUT>  (default v6_repair_sn_local_peak.csv) — best λ per mix/buf
          ../doc/<SWEEP_ALL_OUT or {SWEEP_OUT stem}_sweep.csv> — all λ points
@@ -21,15 +21,19 @@ import re
 import shutil
 import subprocess
 
-import sweep_sn_throughput as S
-
 HERE = os.path.dirname(os.path.abspath(__file__))
-DOC = os.path.join(os.path.dirname(HERE), "doc")
+ROOT = os.path.dirname(HERE)
+BOOKSIM = os.path.join(ROOT, "src", "booksim")
+GEN = os.path.join(HERE, "gen_chi_traffic.py")
+CFG = os.path.join(HERE, "chi_traffic")
+DOC = os.path.join(ROOT, "doc")
 CSV_OUT = os.path.join(DOC, os.environ.get("SWEEP_OUT", "v6_repair_sn_local_peak.csv"))
 _all_default = os.path.splitext(os.environ.get("SWEEP_OUT", "v6_repair_sn_local_peak.csv"))[0] + "_sweep.csv"
 ALL_CSV_OUT = os.path.join(DOC, os.environ.get("SWEEP_ALL_OUT", _all_default))
 STATS_OUT_DIR = os.path.join(DOC, os.environ.get("SWEEP_STATS_DIR", "stats_out"))
 STATS_M = os.path.join(HERE, "sn_local_stats.m")
+
+LINK_CEILING = 1.0  # one SN terminal link = 1 flit/cycle
 
 BASE = {
     "CHI_ROUTING": "xy",
@@ -68,6 +72,135 @@ def set_chi_env(d):
     os.environ.update(d)
 
 
+def regen(lam):
+    env = dict(os.environ, CHI_LAMBDA=repr(lam))
+    subprocess.run(["python3", GEN], env=env, cwd=HERE,
+                   capture_output=True, check=True)
+
+
+def run_booksim():
+    p = subprocess.run([BOOKSIM, "chi_traffic"], cwd=HERE,
+                       capture_output=True, text=True, timeout=600)
+    return p.stdout + p.stderr
+
+
+def read_class_source(txt):
+    """class_source = {{..},{..},...}; -> list of node-id sets (one per class)."""
+    m = re.search(r"class_source\s*=\s*\{(.*?)\}\s*;", txt, re.S)
+    if not m:
+        raise RuntimeError("class_source not found in config")
+    inner = m.group(1)
+    sets = re.findall(r"\{([^{}]*)\}", inner)
+    return [set(int(x) for x in s.split(",") if x.strip()) for s in sets]
+
+
+def read_traffic_dst(txt):
+    """traffic = {hotspot({..}),...}; -> list of destination node-id sets."""
+    m = re.search(r"traffic\s*=\s*\{(.*?)\}\s*;", txt, re.S)
+    if not m:
+        raise RuntimeError("traffic not found in config")
+    dsts = re.findall(r"hotspot\(\{+([^{}]*)\}+\)", m.group(1))
+    return [set(int(x) for x in s.split(",") if x.strip()) for s in dsts]
+
+
+def sn_node_set(txt):
+    """Parse SN node ids from the placement comment: R#=node168@(...)."""
+    return set(int(x) for x in re.findall(r"node(\d+)@", txt))
+
+
+def class_meta():
+    with open(CFG) as f:
+        txt = f.read()
+    subnet = read_int_vec(txt, "class_subnet")
+    csrc = read_class_source(txt)
+    cdst = read_traffic_dst(txt)
+    sn = sn_node_set(txt)
+    dat = 3  # REQ=0 RSP=1 SNP=2 DAT=3
+    read_cls = [c for c in range(len(subnet))
+                if subnet[c] == dat and csrc[c] == sn]
+    write_cls = [c for c in range(len(subnet))
+                 if subnet[c] == dat and cdst[c] == sn]
+    return read_cls, write_cls, len(sn)
+
+
+def parse_overall(log):
+    if "Overall Traffic Statistics" not in log:
+        return None
+    tail = log.split("Overall Traffic Statistics")[-1]
+    out = {}
+    block_re = re.compile(
+        r"====== Traffic class (\d+) ======(.*?)"
+        r"(?======= Traffic class|Total run time|$)", re.S)
+    fields = {
+        "flat": r"Flit latency average = ([0-9.eE+-]+|nan)",
+        "inj_flit": r"Injected flit rate average = ([0-9.eE+-]+)",
+        "acc_flit": r"Accepted flit rate average = ([0-9.eE+-]+)",
+    }
+    for m in block_re.finditer(tail):
+        c = int(m.group(1))
+        body = m.group(2)
+        row = {}
+        for key, pat in fields.items():
+            mm = re.search(pat, body)
+            row[key] = None if (not mm or mm.group(1).lower() == "nan") else float(mm.group(1))
+        out[c] = row
+    return out
+
+
+def parse_last_display(log):
+    """Recover the last periodic DisplayStats snapshot from a diverged run."""
+    field_pat = {
+        "flat": re.compile(r"^Flit latency average = ([0-9.eE+-]+|nan)"),
+        "inj_flit": re.compile(r"^Injected flit rate average = ([0-9.eE+-]+)"),
+        "acc_flit": re.compile(r"^Accepted flit rate average\s*=\s*([0-9.eE+-]+)"),
+    }
+    class_re = re.compile(r"^Class (\d+):\s*$")
+    out = {}
+    cur = None
+    for line in log.splitlines():
+        m = class_re.match(line)
+        if m:
+            cur = int(m.group(1))
+            continue
+        if cur is None:
+            continue
+        for key, pat in field_pat.items():
+            mm = pat.match(line)
+            if mm:
+                v = mm.group(1)
+                out.setdefault(cur, {})[key] = None if v.lower() == "nan" else float(v)
+                break
+    if not any("acc_flit" in r for r in out.values()):
+        return None
+    return out
+
+
+def wavg(stats, classes, val_key, w_key):
+    num = den = 0.0
+    for c in classes:
+        r = stats.get(c, {})
+        v, w = r.get(val_key), r.get(w_key)
+        if v is None or w is None or w <= 0:
+            continue
+        num += v * w
+        den += w
+    return num / den if den > 0 else None
+
+
+def group(stats, classes, nodes, nsn):
+    """Absolute (all-4-SN) and per-SN flit/cycle for a class group."""
+    acc = sum((stats.get(c, {}).get("acc_flit") or 0.0) for c in classes) * nodes
+    inj = sum((stats.get(c, {}).get("inj_flit") or 0.0) for c in classes) * nodes
+    return {
+        "acc_total": acc,
+        "acc_per_sn": acc / nsn if nsn else 0.0,
+        "inj_total": inj,
+        "inj_per_sn": inj / nsn if nsn else 0.0,
+        "flat": wavg(stats, classes, "flat", "acc_flit"),
+        "util": (acc / nsn / LINK_CEILING) if nsn else 0.0,
+    }
+
+
 def sn_nodes(txt):
     ids = re.findall(r"node(\d+)@", txt)
     return [int(x) for x in ids]
@@ -87,6 +220,8 @@ def class_labels(txt):
 
 def read_int_vec(txt, key):
     m = re.search(re.escape(key) + r"\s*=\s*\{([^}]*)\}", txt)
+    if not m:
+        raise RuntimeError(f"{key} not found in config")
     return [int(x) for x in m.group(1).split(",")]
 
 
@@ -112,13 +247,13 @@ def class_roles(txt):
 
 
 def enable_stats_out():
-    with open(S.CFG) as f:
+    with open(CFG) as f:
         lines = f.readlines()
     out = [ln for ln in lines if not ln.strip().startswith("stats_out")]
     if out and not out[-1].endswith("\n"):
         out[-1] += "\n"
     out.append(f"stats_out = {STATS_M};\n")
-    with open(S.CFG, "w") as f:
+    with open(CFG, "w") as f:
         f.writelines(out)
 
 
@@ -151,31 +286,31 @@ def sn_stats(rates, cls, sn_ids):
 
 def run_once(lam, buf, mix_env):
     set_chi_env({**BASE, **mix_env, "CHI_VC_BUF_SIZE": str(buf)})
-    S.regen(lam)
+    regen(lam)
     enable_stats_out()
-    with open(S.CFG) as f:
+    with open(CFG) as f:
         txt = f.read()
     sn_ids = sn_nodes(txt)
     dat_read, dat_write, req_sn = class_roles(txt)
     nodes_m = re.search(r"=\s*(\d+)\s*nodes", txt)
     nodes = int(nodes_m.group(1)) if nodes_m else 172
 
-    log = S.run_booksim()
+    log = run_booksim()
     saturated = ("Simulation unstable" in log) or ("Aborting simulation" in log)
-    stats = S.parse_overall(log)
+    stats = parse_overall(log)
     unstable = False
     if stats is None:
-        stats = S.parse_last_display(log)
+        stats = parse_last_display(log)
         unstable = True
     state = "UNSTBL" if unstable else ("SAT" if saturated else "ok")
 
     e2e_rd = e2e_wr = None
     if stats:
-        read_cls, write_cls, nsn = S.class_meta()
+        read_cls, write_cls, nsn = class_meta()
         if mix_env is READ_MIX:
-            e2e_rd = S.group(stats, read_cls, nodes, nsn)["util"]
+            e2e_rd = group(stats, read_cls, nodes, nsn)["util"]
         else:
-            e2e_wr = S.group(stats, write_cls, nodes, nsn)["util"]
+            e2e_wr = group(stats, write_cls, nodes, nsn)["util"]
 
     rates = parse_matlab_rates(STATS_M) if os.path.exists(STATS_M) else {}
 
@@ -316,7 +451,7 @@ def main():
 
     set_chi_env({"CHI_ROUTING": "xy", "CHI_LINK_LATENCY": "2",
                  "CHI_VC_BUF_SIZE": "2", "CHI_LAMBDA": "0.001"})
-    S.regen(0.001)
+    regen(0.001)
     if os.path.exists(STATS_M):
         os.remove(STATS_M)
     print("Restored baseline chi_traffic")
