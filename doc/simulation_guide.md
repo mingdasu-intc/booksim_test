@@ -142,7 +142,7 @@ python3 sweep_sn_local_peak.py
 ```
 
 输出：
-- `doc/zcn_sn_local_peak.csv` — 每个 mix 的最优 λ 及 SN 峰值
+- `doc/zcn_sn_local_peak.csv` — 每个 mix 在扫描中 **SN DAT avg 最高** 的 λ 及对应指标
 - `doc/stats_out/zcn/{mix}_buf{N}_D{D}_lam{L}_sn_local_stats.m` — 原始统计
 
 ### 4.3 修改流量 mix
@@ -172,7 +172,7 @@ CHI_READ_SHARED_RATIO=100 CHI_READ_DMT_MISS_RATIO=100 \
 CHI_READ_L3_HIT_RATIO=0 CHI_READ_DCT_RATIO=0 \
 SWEEP_OUT=zcn_sn_read_ceiling.csv \
 SWEEP_MAX_UNSTBL=5 \
-SWEEP_LAMBDAS="0.002 0.004 0.006 0.008 0.01 0.012 0.014 0.016 0.018 0.02" \
+SWEEP_LAMBDAS="0.005 0.01 0.015 0.016 0.018  0.02 0.021 0.022 0.023 0.024 0.025 0.026 0.028 0.03 0.031 0.032 0.033 0.034 0.035"  \
 python3 sweep_sn_throughput.py
 ```
 
@@ -221,10 +221,10 @@ ZCN_VC_BUF=4 ZCN_DATA_FLITS=2 LOCAL_CSV=zcn_sn_local_peak.csv \
 
 ### 6.3 当前 ZCN 参考结果（node normalize 开启）
 
-| 路径 | λ* | SN DAT peak | SN REQ peak |
-|------|-----|-------------|-------------|
-| Read | 0.021 | 73.0% | 44.2% |
-| Write | 0.030 | 86.2% | 62.4% |
+| 路径 | λ* (max avg) | SN DAT avg | SN DAT peak |
+|------|--------------|------------|-------------|
+| Read | 0.021 | 65.2% | 73.0% |
+| Write | 0.035 | 85.5% | 87.2% |
 
 ---
 

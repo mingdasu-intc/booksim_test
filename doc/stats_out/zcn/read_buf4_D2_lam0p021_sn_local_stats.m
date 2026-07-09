@@ -42,7 +42,7 @@
 %link_failures = 0;
 %max_held_slots = -1;
 %max_outstanding_requests = 0;
-%max_samples = 20;
+%max_samples = 50;
 %measure_stats = 1;
 %n = 2;
 %noq = 0;

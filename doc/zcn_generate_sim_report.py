@@ -2,7 +2,7 @@
 """ZCN scenario report: vc_buf=4, DATA_FLITS=2, SN read/write utilization.
 
 Inputs (doc/):
-  zcn_sn_local_peak.csv       SN terminal local peaks — best λ per mix
+  zcn_sn_local_peak.csv       SN terminal metrics at λ* (max SN DAT avg per mix)
   zcn_sn_local_peak_sweep.csv full λ sweep — SN DAT avg vs λ curve
 
 Outputs:
@@ -55,15 +55,27 @@ def load_sweep(path):
     return rows
 
 
+def best_by_avg(rows, mix):
+    """Return the sweep row with highest sn_dat_avg for a mix."""
+    pts = [r for r in rows if r.get("mix") == mix]
+    if not pts:
+        return None
+    return max(pts, key=lambda r: r["sn_dat_avg"])
+
+
 def main():
     local = load_csv(LOCAL_CSV)
     sweep = load_sweep(SWEEP_CSV)
-    if not local:
-        print(f"No data in {LOCAL_CSV}; run sweep first.")
+    if sweep:
+        read_local = best_by_avg(sweep, "read")
+        write_local = best_by_avg(sweep, "write")
+    elif local:
+        read_local = next((r for r in local if r["mix"] == "read"), None)
+        write_local = next((r for r in local if r["mix"] == "write"), None)
+    else:
+        print(f"No data in {SWEEP_CSV} or {LOCAL_CSV}; run sweep first.")
         return
 
-    read_local = next((r for r in local if r["mix"] == "read"), None)
-    write_local = next((r for r in local if r["mix"] == "write"), None)
     read_sweep = [r for r in sweep if r.get("mix") == "read"]
     write_sweep = [r for r in sweep if r.get("mix") == "write"]
 
@@ -83,9 +95,9 @@ def main():
         w = 0.28
         if read_local:
             ax.bar(x[0] - w / 2, float(read_local["sn_dat_peak"]) * 100, w,
-                   label="SN local DAT", color=COL_SN)
+                   label="SN local DAT peak", color=COL_SN)
             ax.bar(x[0] + w / 2, float(read_local["sn_req_peak"]) * 100, w,
-                   label="SN local REQ", color=COL_REQ)
+                   label="SN local REQ peak", color=COL_REQ)
         if write_local:
             ax.bar(x[1] - w / 2, float(write_local["sn_dat_peak"]) * 100, w,
                    color=COL_SN)
@@ -96,7 +108,7 @@ def main():
         ax.set_xticklabels(cats)
         ax.set_ylabel("flit/cycle (% of 1.0 link)")
         ax.set_ylim(0, 110)
-        ax.set_title("SN terminal peaks (best λ per mix)")
+        ax.set_title("SN terminal peaks at λ* (max SN DAT avg per mix)")
         ax.legend(fontsize=9, loc="upper left")
         ax.grid(alpha=0.2, axis="y")
 
@@ -114,6 +126,17 @@ def main():
                 [r["sn_dat_avg"] * 100 for r in write_sweep],
                 "s-", color=COL_WRITE, label="Write SN DAT avg", ms=4, lw=1.5,
             )
+        for label, r, col in (
+            ("Read λ*", read_local, COL_READ),
+            ("Write λ*", write_local, COL_WRITE),
+        ):
+            if not r:
+                continue
+            lam = float(r["lambda"])
+            avg = float(r["sn_dat_avg"]) * 100
+            ax2.axvline(lam, color=col, ls=":", lw=1.2, alpha=0.75)
+            ax2.plot(lam, avg, "*", color=col, ms=12, zorder=5,
+                     label=f"{label}={lam:g} ({avg:.1f}%)")
         ax2.axhline(100, color="#64748b", ls="--", lw=1, alpha=0.5)
         ax2.set_xlabel("injection rate λ (txn/node/cycle)")
         ax2.set_ylabel("SN DAT avg (%)")
@@ -127,7 +150,7 @@ def main():
         # Summary table
         axt = fig.add_axes([0.08, 0.10, 0.84, 0.18])
         axt.axis("off")
-        header = ["Path", "λ*", "SN DAT peak", "SN DAT avg",
+        header = ["Path", "λ* (max avg)", "SN DAT peak", "SN DAT avg",
                   "SN REQ peak", "SN REQ avg", "State"]
         body = []
         for label, r in (("Read", read_local), ("Write", write_local)):
@@ -157,11 +180,16 @@ def main():
             "Read ceiling: 100% ReadShared DMT miss → CompData SN→RN.  "
             "Write ceiling: 100% WriteBack + L3EvictToSN.\n"
             "SN local DAT read = max sent_flits@SN (inject); write = max accepted_flits@SN (eject).  "
-            "SN local REQ = max accepted_flits@SN on REQ channel to SN."
+            "SN local REQ = max accepted_flits@SN on REQ channel to SN.  "
+            "λ* = injection rate with highest SN DAT avg across the sweep."
         )
         if read_local and write_local:
-            rd, wr = float(read_local["sn_dat_peak"]), float(write_local["sn_dat_peak"])
-            notes += f"\nWrite/read SN DAT peak ratio: {wr/rd:.2f}× ({wr:.0%} vs {rd:.0%})."
+            rd_avg = float(read_local["sn_dat_avg"])
+            wr_avg = float(write_local["sn_dat_avg"])
+            notes += (
+                f"\nWrite/read SN DAT avg ratio at λ*: {wr_avg/rd_avg:.2f}× "
+                f"({wr_avg:.0%} vs {rd_avg:.0%})."
+            )
         fig.text(0.05, 0.02, notes, fontsize=7.5, va="bottom",
                  bbox=dict(boxstyle="round", fc="#f8fafc", ec="#cbd5e1"))
 

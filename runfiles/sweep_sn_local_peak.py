@@ -204,7 +204,7 @@ def stats_archive_name(mix_name, buf, lam, data_flits):
 
 
 def sweep_mix(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
-    """Run all lambdas; archive stats_out for best SN-local DAT peak only."""
+    """Run all lambdas; archive stats_out for best SN-local DAT avg only."""
     best = None
     all_rows = []
     for lam in lambdas:
@@ -214,7 +214,7 @@ def sweep_mix(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
         e2e = r["row_dat"][3]
         rpk = r["row_req"][1]
         rav = r["row_req"][2]
-        if peak is None:
+        if avg is None:
             continue
         all_rows.append({
             "mix": mix_name, "buf": buf, "data_flits": data_flits,
@@ -225,7 +225,7 @@ def sweep_mix(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
             "dat_metric": r["row_dat"][0], "req_metric": r["row_req"][0],
             "stats_file": "",
         })
-        if best is None or peak > best["sn_dat_peak"]:
+        if best is None or avg > best["sn_dat_avg"]:
             if best and best.get("stats_path"):
                 try:
                     os.remove(best["stats_path"])
