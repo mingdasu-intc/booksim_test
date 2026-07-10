@@ -1,0 +1,5 @@
+mix,vc_buf_size,data_flits,lambda,state,dat_class,req_sn_class,sn_dat_peak,sn_dat_avg,e2e_dat_util,sn_req_peak,sn_req_avg,dat_metric,req_metric,stats_file
+read,2,2,0.02,UNSTBL,2,1,0.335,0.332,0.3242501,0.4215,0.406375,read_dat_sent_max,read_req_acc_max,stats_out/read_buf2_D2_lam0p02_sn_local_stats.m
+write,2,2,0.02,UNSTBL,5,4,0.543,0.50675,0.5067507,0.425,0.40825,write_dat_acc_max,write_req_acc_max,stats_out/write_buf2_D2_lam0p02_sn_local_stats.m
+read,8,2,0.02,UNSTBL,2,1,0.773,0.6869999999999999,0.6834979000000001,0.423,0.40925,read_dat_sent_max,read_req_acc_max,stats_out/read_buf8_D2_lam0p02_sn_local_stats.m
+write,8,2,0.02,ok,5,4,0.8505,0.8355000000000001,0.8354986000000001,0.441,0.41931250000000003,write_dat_acc_max,write_req_acc_max,stats_out/write_buf8_D2_lam0p02_sn_local_stats.m

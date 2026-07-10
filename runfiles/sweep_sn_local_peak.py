@@ -57,9 +57,12 @@ WRITE_MIX = {
     "CHI_L3_EVICT_TO_SN_RATE": "1.0",
 }
 DEFAULT_BUFS = [2, 8]
-# Keep defaults in the linear/knee region after CHI_NODE_NORMALIZE (SN inject ×21).
-# High λ (0.1–0.8) often abort before WriteStats finishes on slower machines.
-DEFAULT_LAMBDAS = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03]
+# Dense sampling around the saturation knee after CHI_NODE_NORMALIZE (SN inject ×21).
+DEFAULT_LAMBDAS = [
+    0.005, 0.01, 0.015, 0.016, 0.018, 0.02, 0.021, 0.022, 0.023, 0.024,
+    0.025, 0.026, 0.028, 0.03, 0.031, 0.032, 0.033, 0.034, 0.035, 0.036,
+    0.037, 0.038, 0.039, 0.04, 0.041, 0.042, 0.043,
+]
 
 
 def parse_list(env, default, cast):
@@ -150,7 +153,7 @@ def parse_overall(log):
         r"====== Traffic class (\d+) ======(.*?)"
         r"(?======= Traffic class|Total run time|$)", re.S)
     fields = {
-        "flat": r"Flit latency average = ([0-9.eE+-]+|nan)",
+        "plat": r"Packet latency average = ([0-9.eE+-]+|nan)",
         "inj_flit": r"Injected flit rate average = ([0-9.eE+-]+)",
         "acc_flit": r"Accepted flit rate average = ([0-9.eE+-]+)",
     }
@@ -168,7 +171,7 @@ def parse_overall(log):
 def parse_last_display(log):
     """Recover the last periodic DisplayStats snapshot from a diverged run."""
     field_pat = {
-        "flat": re.compile(r"^Flit latency average = ([0-9.eE+-]+|nan)"),
+        "plat": re.compile(r"^Packet latency average = ([0-9.eE+-]+|nan)"),
         "inj_flit": re.compile(r"^Injected flit rate average = ([0-9.eE+-]+)"),
         "acc_flit": re.compile(r"^Accepted flit rate average\s*=\s*([0-9.eE+-]+)"),
     }
@@ -214,7 +217,7 @@ def group(stats, classes, nodes, nsn):
         "acc_per_sn": acc / nsn if nsn else 0.0,
         "inj_total": inj,
         "inj_per_sn": inj / nsn if nsn else 0.0,
-        "flat": wavg(stats, classes, "flat", "acc_flit"),
+        "plat": wavg(stats, classes, "plat", "acc_flit"),
         "util": (acc / nsn / LINK_CEILING) if nsn else 0.0,
     }
 

@@ -126,7 +126,7 @@ def parse_overall(log):
         r"====== Traffic class (\d+) ======(.*?)"
         r"(?======= Traffic class|Total run time|$)", re.S)
     fields = {
-        "flat": r"Flit latency average = ([0-9.eE+-]+|nan)",
+        "plat": r"Packet latency average = ([0-9.eE+-]+|nan)",
         "inj_flit": r"Injected flit rate average = ([0-9.eE+-]+)",
         "acc_flit": r"Accepted flit rate average = ([0-9.eE+-]+)",
     }
@@ -144,7 +144,7 @@ def parse_overall(log):
 def parse_last_display(log):
     """Recover the last periodic DisplayStats snapshot from a diverged run."""
     field_pat = {
-        "flat": re.compile(r"^Flit latency average = ([0-9.eE+-]+|nan)"),
+        "plat": re.compile(r"^Packet latency average = ([0-9.eE+-]+|nan)"),
         "inj_flit": re.compile(r"^Injected flit rate average = ([0-9.eE+-]+)"),
         "acc_flit": re.compile(r"^Accepted flit rate average\s*=\s*([0-9.eE+-]+)"),
     }
@@ -190,7 +190,7 @@ def group(stats, classes, nodes, nsn):
         "acc_per_sn": acc / nsn if nsn else 0.0,
         "inj_total": inj,
         "inj_per_sn": inj / nsn if nsn else 0.0,
-        "flat": wavg(stats, classes, "flat", "acc_flit"),
+        "plat": wavg(stats, classes, "plat", "acc_flit"),
         "util": (acc / nsn / LINK_CEILING) if nsn else 0.0,
     }
 
@@ -239,9 +239,9 @@ def main():
         rows.append([
             lam, state, nsn,
             rd["acc_per_sn"], rd["acc_total"], rd["inj_per_sn"], rd["inj_total"],
-            rd["util"], rd["flat"],
+            rd["util"], rd["plat"],
             wr["acc_per_sn"], wr["acc_total"], wr["inj_per_sn"], wr["inj_total"],
-            wr["util"], wr["flat"],
+            wr["util"], wr["plat"],
         ])
         if saturated:
             sat_streak += 1
@@ -257,9 +257,9 @@ def main():
         w.writerow([
             "lambda", "state", "n_sn",
             "read_acc_per_sn", "read_acc_total", "read_inj_per_sn", "read_inj_total",
-            "read_util", "read_flat",
+            "read_util", "read_plat",
             "write_acc_per_sn", "write_acc_total", "write_inj_per_sn", "write_inj_total",
-            "write_util", "write_flat",
+            "write_util", "write_plat",
         ])
         w.writerows(rows)
     print(f"\nWrote {CSV_OUT} ({len(rows)} rows)")

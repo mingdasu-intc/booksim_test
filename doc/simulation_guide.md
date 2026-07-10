@@ -160,7 +160,9 @@ python3 sweep_sn_local_peak.py
 
 脚本：`sweep_sn_throughput.py`
 
-按 λ 扫描，记录 SN 读/写 DAT 的 **全网 E2E accepted 利用率**。ZCN 报告已不再使用此指标，但可用于观察 λ–吞吐曲线或做对比分析。
+按 λ 扫描，记录 SN 读/写 DAT 的 **全网 E2E accepted 利用率**，以及 DAT class 按 accepted flit 加权的 **Packet latency**（CSV 列 `read_plat` / `write_plat`）。ZCN 报告第 1 页的“Latency vs offered load”曲线即取自这两个 CSV。
+
+> Packet latency = `atime − ctime`，**包含源端注入队列的排队时间**，因此随 λ 增大而上升。BookSim 另有 Flit latency (`atime − itime`) 只计网络传输、不含源排队；早期版本用的是它，故读曲线会“假性”很平。旧 CSV 的 `read_flat`/`write_flat` 列报告仍可回退读取。
 
 ```bash
 cd booksim2/runfiles
@@ -255,7 +257,61 @@ ZCN_VC_BUF=4 ZCN_DATA_FLITS=2 LOCAL_CSV=zcn_sn_local_peak.csv \
 
 ---
 
-## 9. 常见问题
+## 9. BookSim 如何判定 unstable / 收敛
+
+判定逻辑在 `src/trafficmanager.cpp` 的 `_SingleSim()`，以 **sample window**（默认 `sample_period=1000` cycle）为单位循环。每个被统计的 class（`measure_stats=1`）在每个窗口结束时算两个相对变化量：
+
+- **延迟变化** `|Δlatency| / latency`（latency 用 packet latency，含在途 flit）
+- **吞吐变化** `|Δaccepted| / accepted`
+
+对应阈值（`booksim_config.cpp` 默认）：
+
+| 阶段 | 阈值变量 | 默认 |
+|------|----------|------|
+| warmup 延迟 | `warmup_thres` | 0.05 |
+| warmup 吞吐 | `acc_warmup_thres` | 0.05 |
+| running 延迟 | `stopping_thres` | 0.05 |
+| running 吞吐 | `acc_stopping_thres` | 0.05 |
+
+流程：
+
+1. **warming_up**：两量都 < 5% → 进入 running（并清一次统计）。
+2. **running**：连续 **3 个窗口**两量都 < 5% → 判为**收敛**，进入 draining，正常打印 `Overall Traffic Statistics`。
+3. 若在 `max_samples`（配置里设 `50`）个窗口内凑不齐 3 个稳定窗口 → 打印 `Too many sample periods needed to converge`，再由 `Run()` 打印 **`Simulation unstable, ending ...`**。
+4. **另一条独立的 abort**：任何 class 的平均 packet latency（含在途 flit）> `latency_thres`（`CHI_LATENCY_THRES`，默认 500）→ 打印 `Average latency for class X exceeded ... Aborting simulation.`，写出 stats 后中止。
+
+**关键点**：unstable ≠ 平均延迟高。它主要指**吞吐/延迟在窗口间不收敛**（相对波动 >5%）。所以即便某类 flit 的传输延迟看起来不高，只要 accepted rate 一直抖（源端顶满、注入队列进出不稳），就会被判 unstable。
+
+扫描脚本据此把状态标为：
+
+- `ok` — 收敛，取 `Overall` 块
+- `UNSTBL` — 未收敛，回退取最后一次 `DisplayStats` 快照（报告里画虚线 ×）
+- `SAT` / `NODATA` — 日志含 `unstable`/`Aborting` 或根本没有效统计
+- `SWEEP_MAX_UNSTBL` 控制连续多少个饱和/UNSTBL 点后停止扫描
+
+### unstable 能说明吞吐到上限了吗？
+
+可以，但要说准确：**unstable 基本等价于“offered load 已超过网络饱和吞吐”，但它本身是收敛判据，不是直接的吞吐测量。**
+
+- **直接含义**：`max_samples` 个窗口内吞吐/延迟波动收不到 5% 以内。物理上对应**注入速率 > 网络可疏导速率**，源队列越积越多、延迟单调上升。所以它是“已到/已过饱和点”的可靠信号。
+- **真正的上限看 accepted 平台值**，不是看 UNSTBL 标签：λ 再加而 accepted util 不再上升、只有 packet latency 爆炸，那个平台就是饱和吞吐。本次 ZCN ceiling 数据：
+
+  | 路径 | accepted util 平台 | 瓶颈 |
+  |------|--------------------|------|
+  | Read | ~62% | SN 注入口 + fan-out + VC/buffer/HoL |
+  | Write | ~79% | fan-in 汇聚 + SN eject |
+
+**三个 caveat：**
+
+1. 这是**该配置/瓶颈的上限，不是链路 100% 物理带宽**。读 ~62%、写 ~79% 都受 SN 端口、扇入扇出、VC/buffer/HoL、路由限制。
+2. **拐点附近的 UNSTBL 可能是临界噪声**——相对波动恰在 5% 上下横跳也会判 unstable，不代表深度饱和。区分方法：看 latency 是温和上升还是直冲几百 cycle。
+3. **unstable 也可能来自采样噪声 / 统计没写全（NODATA）**，此时那点没有可信吞吐值，不能当上限。
+
+**结论**：unstable ⇒ 很可能已达/超过该流量与配置下的饱和吞吐；但要“证明到上限”，应引用 **accepted-util 平台值 + latency 拐点**，而非只凭 UNSTBL 标签。要精确定位膝点，可在 0.015–0.03 间把 λ 按步长 0.001 加密。
+
+---
+
+## 10. 常见问题
 
 ### λ 扫描在饱和区没有数据（NODATA）
 
@@ -277,7 +333,7 @@ ZCN_VC_BUF=4 ZCN_DATA_FLITS=2 LOCAL_CSV=zcn_sn_local_peak.csv \
 
 ---
 
-## 10. 快速命令索引
+## 11. 快速命令索引
 
 ```bash
 # 单点
