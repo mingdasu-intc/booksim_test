@@ -9,6 +9,8 @@ Uses BookSim stats_out per-node sent_flits / accepted_flits to report, for the
   both          REQ to SN                   -> max accepted_flits/cycle at SN (eject)
 
 Also records optional E2E DAT metrics parsed from the BookSim log.
+If sn_local_stats.m is missing/incomplete, falls back to log-based E2E util
+(peak=avg) so the CSV is not left header-only.
 
 Output: ../doc/<SWEEP_OUT>  (default v6_repair_sn_local_peak.csv) — best λ per mix/buf
          ../doc/<SWEEP_ALL_OUT or {SWEEP_OUT stem}_sweep.csv> — all λ points
@@ -55,7 +57,9 @@ WRITE_MIX = {
     "CHI_L3_EVICT_TO_SN_RATE": "1.0",
 }
 DEFAULT_BUFS = [2, 8]
-DEFAULT_LAMBDAS = [0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.8]
+# Keep defaults in the linear/knee region after CHI_NODE_NORMALIZE (SN inject ×21).
+# High λ (0.1–0.8) often abort before WriteStats finishes on slower machines.
+DEFAULT_LAMBDAS = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03]
 
 
 def parse_list(env, default, cast):
@@ -74,14 +78,28 @@ def set_chi_env(d):
 
 def regen(lam):
     env = dict(os.environ, CHI_LAMBDA=repr(lam))
-    subprocess.run(["python3", GEN], env=env, cwd=HERE,
-                   capture_output=True, check=True)
+    p = subprocess.run(["python3", GEN], env=env, cwd=HERE,
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        err = (p.stderr or p.stdout or "").strip().splitlines()
+        tail = "\n".join(err[-20:]) if err else "(no output)"
+        raise RuntimeError(f"gen_chi_traffic.py failed (rc={p.returncode}):\n{tail}")
 
 
 def run_booksim():
-    p = subprocess.run([BOOKSIM, "chi_traffic"], cwd=HERE,
-                       capture_output=True, text=True, timeout=600)
-    return p.stdout + p.stderr
+    if not os.path.isfile(BOOKSIM) or not os.access(BOOKSIM, os.X_OK):
+        raise FileNotFoundError(
+            f"BookSim binary missing or not executable: {BOOKSIM}\n"
+            "Build it with: cd src && make")
+    try:
+        p = subprocess.run([BOOKSIM, "chi_traffic"], cwd=HERE,
+                           capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired as e:
+        out = (e.stdout or "") + (e.stderr or "")
+        print(f"  ! booksim TIMEOUT after 600s; log tail:\n"
+              + "\n".join(out.strip().splitlines()[-15:]), flush=True)
+        return out, -1, True
+    return p.stdout + p.stderr, p.returncode, False
 
 
 def read_class_source(txt):
@@ -247,26 +265,34 @@ def class_roles(txt):
 
 
 def enable_stats_out():
+    """Force stats_out to a relative path under runfiles/ (cwd of booksim)."""
     with open(CFG) as f:
         lines = f.readlines()
     out = [ln for ln in lines if not ln.strip().startswith("stats_out")]
     if out and not out[-1].endswith("\n"):
         out[-1] += "\n"
-    out.append(f"stats_out = {STATS_M};\n")
+    # Relative path: booksim runs with cwd=HERE, so this always lands in runfiles/.
+    out.append("stats_out = sn_local_stats.m;\n")
     with open(CFG, "w") as f:
         f.writelines(out)
 
 
 def parse_matlab_rates(path):
     """class_1based -> {sent: [per node], accepted: [per node]}."""
+    if not os.path.exists(path):
+        return {}, "missing"
     txt = open(path).read()
+    if "sent_flits(" not in txt and "accepted_flits(" not in txt:
+        return {}, "header_only"
     out = {}
     for kind in ("sent_flits", "accepted_flits"):
         for m in re.finditer(rf"{kind}\((\d+),:\)\s*=\s*\[([^\]]+)\]", txt):
             c = int(m.group(1)) - 1
             vec = [float(x) for x in m.group(2).split()]
             out.setdefault(c, {})[kind.split("_")[0]] = vec  # sent / accepted
-    return out
+    if not out:
+        return {}, "unparsed"
+    return out, "ok"
 
 
 def sn_stats(rates, cls, sn_ids):
@@ -284,10 +310,41 @@ def sn_stats(rates, cls, sn_ids):
     return s_max, s_avg, a_max, a_avg
 
 
+def log_fallback_metrics(stats, mix_env, nodes, nsn):
+    """When sn_local_stats.m is unusable, approximate SN DAT/REQ from log rates.
+
+    Log rates are network-wide averages (flits/cycle/node). Convert to per-SN
+    util the same way as sweep_sn_throughput.group(). Peak is set equal to avg
+    because the log has no per-node breakdown.
+    """
+    if not stats or nsn <= 0:
+        return None, None, None, None
+    read_cls, write_cls, _ = class_meta()
+    if mix_env is READ_MIX:
+        g = group(stats, read_cls, nodes, nsn)
+    else:
+        g = group(stats, write_cls, nodes, nsn)
+    util = g["util"]
+    # No per-node peak in the log; use avg for both so selection still works.
+    return util, util, None, None
+
+
+def diagnose_skip(lam, mix_name, buf, reason, extra=""):
+    msg = f"  ! skip {mix_name} buf={buf} lam={lam:g}: {reason}"
+    if extra:
+        msg += f" ({extra})"
+    print(msg, flush=True)
+
+
 def run_once(lam, buf, mix_env):
+    mix_name = "read" if mix_env is READ_MIX else "write"
     set_chi_env({**BASE, **mix_env, "CHI_VC_BUF_SIZE": str(buf)})
     regen(lam)
     enable_stats_out()
+    # Drop stale stats from a previous λ so we never parse an old file by mistake.
+    if os.path.exists(STATS_M):
+        os.remove(STATS_M)
+
     with open(CFG) as f:
         txt = f.read()
     sn_ids = sn_nodes(txt)
@@ -295,41 +352,84 @@ def run_once(lam, buf, mix_env):
     nodes_m = re.search(r"=\s*(\d+)\s*nodes", txt)
     nodes = int(nodes_m.group(1)) if nodes_m else 172
 
-    log = run_booksim()
+    if not sn_ids:
+        diagnose_skip(lam, mix_name, buf, "no SN nodes in chi_traffic comment")
+    if mix_env is READ_MIX and dat_read is None:
+        diagnose_skip(lam, mix_name, buf, "DAT SN->RN class not found (class_roles)")
+    if mix_env is not READ_MIX and dat_write is None:
+        diagnose_skip(lam, mix_name, buf, "DAT->SN class not found (class_roles)")
+
+    log, rc, timed_out = run_booksim()
     saturated = ("Simulation unstable" in log) or ("Aborting simulation" in log)
     stats = parse_overall(log)
     unstable = False
     if stats is None:
         stats = parse_last_display(log)
         unstable = True
-    state = "UNSTBL" if unstable else ("SAT" if saturated else "ok")
+    if timed_out:
+        state = "TIMO"
+    elif rc != 0 and not saturated:
+        state = f"RC{rc}"
+        diagnose_skip(lam, mix_name, buf, f"booksim rc={rc}",
+                      "log tail: " + " | ".join(log.strip().splitlines()[-3:]))
+    else:
+        state = "UNSTBL" if unstable else ("SAT" if saturated else "ok")
 
     e2e_rd = e2e_wr = None
+    read_cls = write_cls = []
+    nsn = len(sn_ids) or 4
     if stats:
-        read_cls, write_cls, nsn = class_meta()
+        read_cls, write_cls, nsn_meta = class_meta()
+        nsn = nsn_meta or nsn
         if mix_env is READ_MIX:
             e2e_rd = group(stats, read_cls, nodes, nsn)["util"]
         else:
             e2e_wr = group(stats, write_cls, nodes, nsn)["util"]
 
-    rates = parse_matlab_rates(STATS_M) if os.path.exists(STATS_M) else {}
+    rates, stats_status = parse_matlab_rates(STATS_M)
+    used_fallback = False
 
     if mix_env is READ_MIX:
         dat_cls = dat_read
         dat_sent_max, dat_sent_avg, _, _ = sn_stats(rates, dat_cls, sn_ids)
         _, _, req_acc_max, req_acc_avg = sn_stats(rates, req_sn, sn_ids)
+        if dat_sent_avg is None:
+            fb_peak, fb_avg, _, _ = log_fallback_metrics(stats, mix_env, nodes, nsn)
+            if fb_avg is not None:
+                dat_sent_max, dat_sent_avg = fb_peak, fb_avg
+                used_fallback = True
+                diagnose_skip(lam, mix_name, buf,
+                              f"stats_out={stats_status}; using log fallback",
+                              f"e2e_util={fb_avg:.4f}")
+            else:
+                diagnose_skip(lam, mix_name, buf,
+                              f"no SN DAT avg (stats_out={stats_status}, "
+                              f"dat_cls={dat_cls}, sn={sn_ids})")
         row_dat = ("read_dat_sent_max", dat_sent_max, dat_sent_avg, e2e_rd)
         row_req = ("read_req_acc_max", req_acc_max, req_acc_avg, None)
     else:
         dat_cls = dat_write
         _, _, dat_acc_max, dat_acc_avg = sn_stats(rates, dat_cls, sn_ids)
         _, _, req_acc_max, req_acc_avg = sn_stats(rates, req_sn, sn_ids)
+        if dat_acc_avg is None:
+            fb_peak, fb_avg, _, _ = log_fallback_metrics(stats, mix_env, nodes, nsn)
+            if fb_avg is not None:
+                dat_acc_max, dat_acc_avg = fb_peak, fb_avg
+                used_fallback = True
+                diagnose_skip(lam, mix_name, buf,
+                              f"stats_out={stats_status}; using log fallback",
+                              f"e2e_util={fb_avg:.4f}")
+            else:
+                diagnose_skip(lam, mix_name, buf,
+                              f"no SN DAT avg (stats_out={stats_status}, "
+                              f"dat_cls={dat_cls}, sn={sn_ids})")
         row_dat = ("write_dat_acc_max", dat_acc_max, dat_acc_avg, e2e_wr)
         row_req = ("write_req_acc_max", req_acc_max, req_acc_avg, None)
 
     return {
         "state": state, "lam": lam, "dat_cls": dat_cls, "req_cls": req_sn,
         "row_dat": row_dat, "row_req": row_req,
+        "used_fallback": used_fallback, "stats_status": stats_status,
     }
 
 
@@ -342,6 +442,7 @@ def sweep_mix(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
     """Run all lambdas; archive stats_out for best SN-local DAT avg only."""
     best = None
     all_rows = []
+    n_skip = 0
     for lam in lambdas:
         r = run_once(lam, buf, mix_env)
         peak = r["row_dat"][1]
@@ -350,6 +451,7 @@ def sweep_mix(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
         rpk = r["row_req"][1]
         rav = r["row_req"][2]
         if avg is None:
+            n_skip += 1
             continue
         all_rows.append({
             "mix": mix_name, "buf": buf, "data_flits": data_flits,
@@ -359,6 +461,7 @@ def sweep_mix(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
             "sn_req_peak": rpk, "sn_req_avg": rav,
             "dat_metric": r["row_dat"][0], "req_metric": r["row_req"][0],
             "stats_file": "",
+            "used_fallback": r.get("used_fallback", False),
         })
         if best is None or avg > best["sn_dat_avg"]:
             if best and best.get("stats_path"):
@@ -368,26 +471,40 @@ def sweep_mix(mix_name, buf, lambdas, mix_env, stats_dir, data_flits):
                     pass
             stats_name = stats_archive_name(mix_name, buf, lam, data_flits)
             stats_path = os.path.join(stats_dir, stats_name)
-            if os.path.exists(STATS_M):
+            stats_file = ""
+            if os.path.exists(STATS_M) and not r.get("used_fallback"):
                 shutil.copy2(STATS_M, stats_path)
+                stats_file = os.path.join(os.path.basename(stats_dir), stats_name)
             best = {
                 **all_rows[-1],
-                "stats_file": os.path.join(os.path.basename(stats_dir), stats_name),
-                "stats_path": stats_path,
+                "stats_file": stats_file,
+                "stats_path": stats_path if stats_file else None,
             }
     if best:
-        del best["stats_path"]
+        if "stats_path" in best:
+            del best["stats_path"]
         for row in all_rows:
             if row["lam"] == best["lam"]:
-                row["stats_file"] = best["stats_file"]
+                row["stats_file"] = best.get("stats_file", "")
                 break
+    elif n_skip:
+        print(f"  ! {mix_name} buf={buf}: all {n_skip} lambda(s) skipped "
+              f"(no usable SN DAT avg)", flush=True)
     return best, all_rows
 
 
 def main():
+    if not os.path.isfile(BOOKSIM) or not os.access(BOOKSIM, os.X_OK):
+        raise SystemExit(
+            f"BookSim binary missing or not executable: {BOOKSIM}\n"
+            "Build it with: cd src && make")
+
     bufs = parse_list("SWEEP_BUFS", DEFAULT_BUFS, int)
     lambdas = parse_list("SWEEP_LAMBDAS", DEFAULT_LAMBDAS, float)
     data_flits = os.environ.get("CHI_DATA_FLITS", "2")
+    print(f"booksim={BOOKSIM}")
+    print(f"bufs={bufs} lambdas={lambdas} data_flits={data_flits}")
+    print(f"stats_out target={STATS_M}")
 
     os.makedirs(STATS_OUT_DIR, exist_ok=True)
     for fn in os.listdir(STATS_OUT_DIR):
@@ -406,9 +523,10 @@ def main():
                 continue
             pk, av, e2e = b["sn_dat_peak"], b["sn_dat_avg"], b["e2e_dat_util"]
             rpk, rav = b["sn_req_peak"], b["sn_req_avg"]
+            fb = " [log]" if b.get("used_fallback") else ""
             print(f"{mix_name:>5} {buf:>3} {b['lam']:>5.3f} {b['state']:>6} | "
                   f"{(pk or 0):10.4f} {(av or 0):8.4f} {(e2e or 0):8.1%} | "
-                  f"{(rpk or 0):10.4f} {(rav or 0):8.4f}")
+                  f"{(rpk or 0):10.4f} {(rav or 0):8.4f}{fb}")
             rows.append([
                 mix_name, buf, data_flits, b["lam"], b["state"],
                 b["dat_cls"], b["req_cls"],
@@ -448,6 +566,10 @@ def main():
         w.writerows(to_csv_row(r) for r in sweep_rows)
     print(f"Wrote {ALL_CSV_OUT} ({len(sweep_rows)} rows)")
     print(f"Archived stats_out -> {STATS_OUT_DIR}/")
+    if not rows:
+        print("WARNING: peak CSV has header only — every lambda was skipped.\n"
+              "  Check messages above (stats_out=missing/header_only, booksim rc, "
+              "class_roles). Prefer SWEEP_LAMBDAS in 0.005–0.03.")
 
     set_chi_env({"CHI_ROUTING": "xy", "CHI_LINK_LATENCY": "2",
                  "CHI_VC_BUF_SIZE": "2", "CHI_LAMBDA": "0.001"})
