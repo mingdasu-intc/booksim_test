@@ -15,11 +15,26 @@ BookSim traffic class mapped to a CHI channel subnet via the class_subnet patch.
 import os
 
 # ----- topology knobs -----
-ROWS, COLS   = 6, 7
+ROWS = int(os.environ.get("CHI_ROWS", 7))
+COLS = int(os.environ.get("CHI_COLS", 6))
 RN_PER, HN_PER = 2, 2
 FLIT_BYTES   = 16          # network flit width
 LINE_BYTES   = 64          # cache line
-SN_ROUTER_COORDS = [(0, 1), (0, 2), (0, 4), (0, 5)]  # DDR SNs attached above these routers
+
+def _parse_sn_coords(s):
+    """Parse CHI_SN_COORDS like '3,0;4,0;3,5;4,5' -> list of (row,col)."""
+    if not s:
+        return None
+    out = []
+    for part in s.replace(" ", "").split(";"):
+        if not part:
+            continue
+        r, c = part.split(",")
+        out.append((int(r), int(c)))
+    return out
+
+_sn_env = _parse_sn_coords(os.environ.get("CHI_SN_COORDS", ""))
+SN_ROUTER_COORDS = _sn_env if _sn_env else [(3, 0), (4, 0), (3, 5), (4, 5)]
 NUM_VCS      = int(os.environ.get("CHI_VCS", 2))
 VC_BUF_SIZE  = int(os.environ.get("CHI_VC_BUF_SIZE", 2))
 SW_ALLOCATOR = os.environ.get("CHI_SW_ALLOCATOR", "separable_output_first(round_robin)")

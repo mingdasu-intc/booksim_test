@@ -1,0 +1,3 @@
+mix,vc_buf_size,data_flits,lambda,state,dat_class,req_sn_class,sn_dat_peak,sn_dat_avg,e2e_dat_util,sn_req_peak,sn_req_avg,dat_metric,req_metric,stats_file
+read,4,2,0.024,UNSTBL,2,1,0.793,0.7825000000000001,0.7857519,0.517,0.49724999999999997,read_dat_sent_max,read_req_acc_max,zcn_lp/read_buf4_D2_lam0p024_sn_local_stats.m
+write,4,2,0.04,UNSTBL,5,4,0.875,0.84125,0.8412520000000001,0.74,0.71225,write_dat_acc_max,write_req_acc_max,zcn_lp/write_buf4_D2_lam0p04_sn_local_stats.m
