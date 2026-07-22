@@ -1,2 +1,2 @@
-state,link_latency,routing,vc_buf,injection_rate_per_rn,n_src_rn,n_dst_hn,packet_latency,flit_latency,hops,inj_flit_rate_avg_per_node,acc_flit_rate_avg_per_node,inj_flit_rate_abs,acc_flit_rate_abs,src_sent_sum,src_sent_avg,src_sent_min,src_sent_max,dst_acc_sum,dst_acc_avg,dst_acc_min,dst_acc_max
-ok,1,xy,4,0.2,8,16,28.4012,28.5236,4.99789,0.00919186,0.00923837,1.58099992,1.58899964,1.581,0.197625,0.188667,0.209,1.5889992,0.09931245,0.0886667,0.112
+state,link_latency,speculative,routing_delay,vc_alloc_delay,sw_alloc_delay,st_prepare_delay,st_final_delay,router_effective_cycles,routing,vc_buf,injection_rate_per_rn,n_src_rn,n_dst_hn,packet_latency,flit_latency,hops,inj_pkt_rate_avg,acc_pkt_rate_avg,src_sent_sum,src_sent_avg,src_sent_min,src_sent_max,dst_acc_sum,dst_acc_avg,dst_acc_min,dst_acc_max
+ok,1,1,0,1,1,0,0,1,xy,4,0.2,8,16,12.3422,12.3531,4.99789,0.00919186,0.00921124,1.581,0.197625,0.188667,0.209,1.58433,0.0990208,0.0876667,0.113

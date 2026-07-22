@@ -1121,7 +1121,18 @@ void IQRouter::_SWHoldUpdate( )
 
       dest_buf->SendingFlit(f);
 
-      _crossbar_flits.push_back(make_pair(-1, make_pair(f, make_pair(expanded_input, expanded_output))));
+      if(_crossbar_delay == 0) {
+	// True 1-cycle router: when the crossbar has zero delay, perform the
+	// switch traversal in the same cycle as switch allocation instead of
+	// deferring it by (at least) one cycle through _crossbar_flits. This
+	// collapses the SA and ST pipeline stages into a single cycle so that
+	// the router port-to-port delay is exactly 1 cycle (with look-ahead
+	// routing + speculation).
+	_switchMonitor->traversal(input, output, f);
+	_output_buffer[output].push(f);
+      } else {
+	_crossbar_flits.push_back(make_pair(-1, make_pair(f, make_pair(expanded_input, expanded_output))));
+      }
       
       if(_out_queue_credits.count(input) == 0) {
 	_out_queue_credits.insert(make_pair(input, Credit::New()));
@@ -2031,7 +2042,18 @@ void IQRouter::_SWAllocUpdate( )
 
       dest_buf->SendingFlit(f);
 
-      _crossbar_flits.push_back(make_pair(-1, make_pair(f, make_pair(expanded_input, expanded_output))));
+      if(_crossbar_delay == 0) {
+	// True 1-cycle router: when the crossbar has zero delay, perform the
+	// switch traversal in the same cycle as switch allocation instead of
+	// deferring it by (at least) one cycle through _crossbar_flits. This
+	// collapses the SA and ST pipeline stages into a single cycle so that
+	// the router port-to-port delay is exactly 1 cycle (with look-ahead
+	// routing + speculation).
+	_switchMonitor->traversal(input, output, f);
+	_output_buffer[output].push(f);
+      } else {
+	_crossbar_flits.push_back(make_pair(-1, make_pair(f, make_pair(expanded_input, expanded_output))));
+      }
 
       if(_out_queue_credits.count(input) == 0) {
 	_out_queue_credits.insert(make_pair(input, Credit::New()));

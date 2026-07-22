@@ -46,6 +46,16 @@ ROUTING      = os.environ.get("CHI_ROUTING", "min")
 # directed link in the topology file (default 1 when omitted); we emit all four
 # neighbours with the weight so the latency is symmetric in both directions.
 LINK_LAT     = int(os.environ.get("CHI_LINK_LATENCY", 1))
+# Router pipeline delays (BookSim defaults: RC=1 VA=1 SA=1 ST=1 → 4-cycle router).
+# Note: BookSim forbids vc_alloc_delay=0 and sw_alloc_delay=0.
+# For ~1-cycle router on REQ custom, see gen_req_custom_traffic.py
+# (speculative=1, RC=0, VA=1, SA=1, ST=0).
+SPECULATIVE      = int(os.environ.get("CHI_SPECULATIVE", 0))
+ROUTING_DELAY    = int(os.environ.get("CHI_ROUTING_DELAY", 1))
+VC_ALLOC_DELAY   = int(os.environ.get("CHI_VC_ALLOC_DELAY", 1))
+SW_ALLOC_DELAY   = int(os.environ.get("CHI_SW_ALLOC_DELAY", 1))
+ST_PREPARE_DELAY = int(os.environ.get("CHI_ST_PREPARE_DELAY", 0))
+ST_FINAL_DELAY   = int(os.environ.get("CHI_ST_FINAL_DELAY", 1))
 # sim convergence controls: raising these lets a near-saturation point still
 # produce steady-state stats instead of aborting on the default 500-cycle guard.
 # format as float so BookSim parses latency_thres as a float field
@@ -422,6 +432,13 @@ vc_buf_size = {VC_BUF_SIZE};
 vc_allocator = {VC_ALLOCATOR};
 sw_allocator = {SW_ALLOCATOR};
 alloc_iters  = 1;
+
+speculative      = {SPECULATIVE};
+routing_delay    = {ROUTING_DELAY};
+vc_alloc_delay   = {VC_ALLOC_DELAY};
+sw_alloc_delay   = {SW_ALLOC_DELAY};
+st_prepare_delay = {ST_PREPARE_DELAY};
+st_final_delay   = {ST_FINAL_DELAY};
 
 sim_type       = latency;
 sample_period  = 1000;

@@ -7,6 +7,7 @@
 // Destinations (16 HNs): 14,18,19,22,54,58,62,66,102,106,110,114,150,154,158,162
 //   R3/R5: 1 HN; R4: 2 HN; R13–16/R25–28/R37–40: 1 HN each (first N HNs).
 // Per-source injection_rate = 0.2; link_latency = 1; routing = xy.
+// Router: speculative=1 RC/VA/SA/STp/ST=0/1/1/0/0.
 
 topology     = anynet;
 network_file = chi_traffic_anynet;
@@ -27,6 +28,13 @@ vc_buf_size = 4;
 vc_allocator = islip;
 sw_allocator = separable_output_first(round_robin);
 alloc_iters  = 1;
+
+speculative      = 1;
+routing_delay    = 0;
+vc_alloc_delay   = 1;
+sw_alloc_delay   = 1;
+st_prepare_delay = 0;
+st_final_delay   = 0;
 
 sim_type       = latency;
 sample_period  = 1000;
