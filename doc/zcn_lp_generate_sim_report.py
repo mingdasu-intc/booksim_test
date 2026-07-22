@@ -163,7 +163,7 @@ def draw_topology(ax):
     sn_r_str = "/".join(f"R{r}" for r in SN_ROUTERS)
     ax.set_title(
         f"Topology: 7×6 CHI mesh — 84 RN + 84 HN + 4 SN (DDR)\n"
-        f"SN @ {sn_r_str} (nodes 168–171), XY routing, link_latency=2",
+        f"SN @ {sn_r_str} (nodes 168–171), XY routing, link_latency=1, router delay=1 cycle",
         fontsize=10, fontweight="bold", pad=6,
     )
 
@@ -172,7 +172,7 @@ def page_topology_latency(pdf, read_lat, write_lat):
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.suptitle(
         "ZCN-LP Simulation Setup\n"
-        f"vc_buf_size={VC_BUF}, DATA_FLITS={DATA_FLITS}, XY, link_latency=2",
+        f"vc_buf_size={VC_BUF}, DATA_FLITS={DATA_FLITS}, XY, link_latency=1, router delay=1 cycle",
         fontsize=13, fontweight="bold", y=0.98,
     )
 
@@ -236,7 +236,7 @@ def page_utilisation(pdf, read_local, write_local, read_sweep, write_sweep):
     fig.suptitle(
         "ZCN-LP SN Read/Write Utilisation\n"
         f"vc_buf_size={VC_BUF} flits/VC, DATA_FLITS={DATA_FLITS}, "
-        "XY routing, link_latency=2",
+        "XY routing, link_latency=1, router delay=1 cycle",
         fontsize=13, fontweight="bold", y=0.98,
     )
 

@@ -37,10 +37,21 @@ STATS_M = os.path.join(HERE, "sn_local_stats.m")
 
 LINK_CEILING = 1.0  # one SN terminal link = 1 flit/cycle
 
+# Router pipeline + link latency are env-overridable so a scenario can pick a
+# specific router model. Defaults below reproduce the ZCN-LP 1-cycle router
+# (crossbar-bypass patch: ST folded into SA) with link_latency=1.
+# For the legacy 4-cycle / link=2 model pass CHI_SPECULATIVE=0 CHI_ROUTING_DELAY=1
+# CHI_ST_FINAL_DELAY=1 CHI_LINK_LATENCY=2.
 BASE = {
     "CHI_ROUTING": "xy",
-    "CHI_LINK_LATENCY": "2",
+    "CHI_LINK_LATENCY": os.environ.get("CHI_LINK_LATENCY", "1"),
     "CHI_DATA_FLITS": os.environ.get("CHI_DATA_FLITS", "2"),
+    "CHI_SPECULATIVE": os.environ.get("CHI_SPECULATIVE", "1"),
+    "CHI_ROUTING_DELAY": os.environ.get("CHI_ROUTING_DELAY", "0"),
+    "CHI_VC_ALLOC_DELAY": os.environ.get("CHI_VC_ALLOC_DELAY", "1"),
+    "CHI_SW_ALLOC_DELAY": os.environ.get("CHI_SW_ALLOC_DELAY", "1"),
+    "CHI_ST_PREPARE_DELAY": os.environ.get("CHI_ST_PREPARE_DELAY", "0"),
+    "CHI_ST_FINAL_DELAY": os.environ.get("CHI_ST_FINAL_DELAY", "0"),
 }
 READ_MIX = {
     "CHI_READ_RATIO": "100", "CHI_WRITE_RATIO": "0",
@@ -574,8 +585,7 @@ def main():
               "  Check messages above (stats_out=missing/header_only, booksim rc, "
               "class_roles). Prefer SWEEP_LAMBDAS in 0.005–0.03.")
 
-    set_chi_env({"CHI_ROUTING": "xy", "CHI_LINK_LATENCY": "2",
-                 "CHI_VC_BUF_SIZE": "2", "CHI_LAMBDA": "0.001"})
+    set_chi_env({**BASE, "CHI_VC_BUF_SIZE": "2", "CHI_LAMBDA": "0.001"})
     regen(0.001)
     if os.path.exists(STATS_M):
         os.remove(STATS_M)
